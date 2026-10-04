@@ -69,12 +69,12 @@ watch(
 
 <template>
     <div class="flex h-full w-full flex-col">
-        <div v-show="slots.toolbar || !isPhone || nameError" class="z-[15] flex flex-col p-4 print:hidden" :class="slots.toolbar ? 'gap-3' : ''">
+        <div v-show="slots.toolbar || !isPhone || nameError" class="z-[15] flex flex-col px-4 pt-2 pb-3 sm:px-8 sm:pt-5 print:hidden" :class="slots.toolbar ? 'gap-2' : ''">
             <Teleport defer to="#file-header" :disabled="!isPhone">
                 <div class="flex min-w-0 w-full items-center justify-between gap-2">
                     <input
                         v-model="name"
-                        class="min-w-0 flex-1 truncate border-0 bg-transparent p-0 px-1 text-base font-semibold focus-visible:ring-1 focus-visible:ring-ring sm:text-lg"
+                        class="text-foreground min-w-0 flex-1 truncate rounded-sm border-0 bg-transparent p-0 text-base font-medium focus-visible:ring-1 focus-visible:ring-ring"
                         type="text"
                         aria-label="Document title"
                         :title="name"
@@ -84,11 +84,11 @@ watch(
                         :aria-describedby="nameError ? nameErrorId : undefined"
                         @input="rename(name)"
                     />
-                    <div class="flex shrink-0 items-center gap-3">
+                    <div class="text-muted-foreground flex shrink-0 items-center gap-1">
                         <VaultFileUpdatingSpinner />
                         <VaultToggleContentWidthButton />
-                        <button v-if="!isPhone" class="inline-flex items-center justify-center rounded-md" title="Close file" @click="vaultActions.closeFile">
-                            <XMark class="size-4 sm:size-5" />
+                        <button v-if="!isPhone" class="hover:bg-accent hover:text-foreground inline-flex size-9 items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-ring" title="Close file" @click="vaultActions.closeFile">
+                            <XMark class="size-4" />
                         </button>
                     </div>
                 </div>
@@ -96,7 +96,7 @@ watch(
             <TextError v-if="nameError" :id="nameErrorId" class="px-1" :text="nameError" />
             <slot name="toolbar" />
         </div>
-        <div class="mb-4 flex w-full flex-grow overflow-y-auto">
+        <div class="mb-4 flex min-h-0 w-full flex-grow overflow-y-auto">
             <slot />
         </div>
     </div>

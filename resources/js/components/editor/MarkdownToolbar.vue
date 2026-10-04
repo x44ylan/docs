@@ -289,7 +289,7 @@ function print(): void {
 
 <template>
     <div
-        class="flex min-w-0 items-center gap-1 rounded-lg bg-muted/40 p-1"
+        class="text-muted-foreground border-border/60 flex min-w-0 items-center gap-1 border-b pb-1"
         role="group"
         aria-label="Document formatting"
     >

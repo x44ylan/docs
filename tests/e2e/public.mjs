@@ -83,7 +83,7 @@ export async function publicLinks({ browser, base, jwt, dir, fixture }) {
             const box = await share.locator('svg').boundingBox();
             assert(box.width === 14 && box.height === 14);
             const buttonBox = await share.boundingBox();
-            assert(buttonBox.width === 36 && buttonBox.height === 36, 'Keep the share button click area unchanged');
+            assert(buttonBox.width === (width < 640 ? 44 : 36) && buttonBox.height === (width < 640 ? 44 : 36), 'Share button stays compact on desktop and touch-sized on phones');
             await owner.screenshot({ path: new URL(`share-icon-${width}.png`, dir).pathname, animations: 'disabled' });
             if (width < 1024) await toggle.click();
         }

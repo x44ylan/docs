@@ -91,14 +91,20 @@ export async function html(page, dir) {
     await page.getByRole('button', { name: 'Show HTML code', exact: true }).click();
     const saved = waitSave();
     await code.click();
-    await code.evaluate((el) => {
+    const end = await code.evaluate((el) => {
         const range = document.createRange();
         range.selectNodeContents(el);
         range.collapse(false);
         const selection = window.getSelection();
         selection.removeAllRanges();
         selection.addRange(range);
+        return el.closest('.tiptap').editor.view.posAtDOM(range.endContainer, range.endOffset);
     });
+    // selectionchange updates Tiptap asynchronously; typing earlier uses the click's caret.
+    await page.waitForFunction(end => {
+        const selection = document.querySelector('.tiptap').editor.state.selection;
+        return selection.from === end && selection.to === end;
+    }, end);
     await page.keyboard.type(' ');
     const response = await saved;
     assert.equal(response.status(), 200);

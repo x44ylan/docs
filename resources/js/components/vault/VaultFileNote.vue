@@ -104,16 +104,16 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="flex h-full w-full flex-col">
+    <div class="note-content flex h-full w-full flex-col">
         <div
             ref="noteEditorRef"
-            class="h-full px-4"
+            class="h-full px-4 pb-8 sm:px-8 sm:pb-12"
             :class="isEditingMarkdown ? 'hidden' : ''"
         ></div>
 
         <textarea
             ref="noteMarkdownRef"
-            class="h-full w-full resize-none border-0 bg-transparent px-4 break-words whitespace-break-spaces focus:outline-none focus:ring-0"
+            class="h-full w-full resize-none border-0 bg-transparent px-4 pb-8 font-mono text-sm leading-relaxed break-words whitespace-break-spaces focus:outline-none focus:ring-0 sm:px-8 sm:pb-12"
             :class="isEditingMarkdown ? '' : 'hidden'"
             :readonly="!isEditMode"
             aria-label="Markdown source"

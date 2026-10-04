@@ -7,7 +7,7 @@ import VaultFilesImportModal from '@/components/modal/VaultFilesImportModal.vue'
 import VaultNodeCreateModal from '@/components/modal/VaultNodeCreateModal.vue';
 import VaultNodeEditModal from '@/components/modal/VaultNodeEditModal.vue';
 import MoveModal from '@/components/modal/MoveModal.vue';
-import { Folder, FolderOpen, FolderInput } from 'lucide-vue-next';
+import { FileText, Folder, FolderOpen, FolderInput } from 'lucide-vue-next';
 import { useModalManager } from '@/composables/useModalManager';
 import { useScreenSize } from '@/composables/useScreenSize';
 import { useVaultActions } from '@/composables/useVaultActions';
@@ -19,7 +19,6 @@ import DocumentPlus from '@/icons/DocumentPlus.vue';
 import EllipsisVertical from '@/icons/EllipsisVertical.vue';
 import FileAudio from '@/icons/FileAudio.vue';
 import FileImage from '@/icons/FileImage.vue';
-import FileMarkdown from '@/icons/FileMarkdown.vue';
 import FilePDF from '@/icons/FilePDF.vue';
 import FileVideo from '@/icons/FileVideo.vue';
 import FolderPlus from '@/icons/FolderPlus.vue';
@@ -114,7 +113,7 @@ function handleClick() {
             :class="[
                 isSelected
                     ? 'bg-[#27272a] text-[#fafafa]'
-                    : 'text-foreground hover:bg-accent',
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                 isValidDropInside ? 'ring-2 ring-inset ring-ring' : '',
                 vaultTreeDragAndDrop.draggingNodeId.value === node.id ? 'opacity-40' : '',
             ]"
@@ -129,18 +128,18 @@ function handleClick() {
             <span v-else class="w-8 shrink-0 sm:w-6" aria-hidden="true" />
             <button
                 type="button"
-                class="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] sm:min-h-8"
+                class="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 rounded text-left focus-visible:outline-2 focus-visible:outline-offset-[-2px] sm:min-h-8"
                 :title="node.name"
                 :aria-current="isSelected ? 'page' : undefined"
                 @click="handleClick"
             >
                 <span class="flex shrink-0 items-center justify-center">
-                    <FileMarkdown v-if="node.extension === 'md'" class="h-4 w-4 opacity-70" />
-                    <FileAudio v-else-if="node.type === 'audio'" class="h-4 w-4 opacity-70" />
-                    <FileImage v-else-if="node.type === 'image'" class="h-4 w-4 opacity-70" />
-                    <FilePDF v-else-if="node.type === 'pdf'" class="h-4 w-4 opacity-70" />
-                    <FileVideo v-else-if="node.type === 'video'" class="h-4 w-4 opacity-70" />
-                    <component :is="isExpanded ? FolderOpen : Folder" v-else class="size-4 opacity-70" />
+                    <FileText v-if="node.extension === 'md'" class="size-4 opacity-70 sm:size-3.5" />
+                    <FileAudio v-else-if="node.type === 'audio'" class="size-4 opacity-70 sm:size-3.5" />
+                    <FileImage v-else-if="node.type === 'image'" class="size-4 opacity-70 sm:size-3.5" />
+                    <FilePDF v-else-if="node.type === 'pdf'" class="size-4 opacity-70 sm:size-3.5" />
+                    <FileVideo v-else-if="node.type === 'video'" class="size-4 opacity-70 sm:size-3.5" />
+                    <component :is="isExpanded ? FolderOpen : Folder" v-else class="size-4 opacity-70 sm:size-3.5" />
                 </span>
                 <span class="truncate">
                     {{ node.name }}
@@ -153,7 +152,7 @@ function handleClick() {
                         :aria-label="`Actions for ${node.name}`"
                         class="flex h-11 w-8 shrink-0 items-center justify-center rounded opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 sm:h-8 sm:w-7 [@media(hover:none)]:opacity-100"
                     >
-                        <EllipsisVertical class="h-5 w-5" />
+                        <EllipsisVertical class="size-4 sm:size-3.5" />
                     </button>
                 </template>
                 <template #default="{ closeMenu }">

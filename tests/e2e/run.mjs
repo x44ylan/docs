@@ -14,6 +14,8 @@ import { icons } from './icons.mjs';
 import { sharing } from './sharing.mjs';
 import { publicLinks } from './public.mjs';
 import { mcp } from './mcp.mjs';
+import { ui } from './ui.mjs';
+import { preview } from './preview.mjs';
 
 const image = process.argv[2] ?? 'docs:review';
 const baseline = process.argv.includes('--baseline');
@@ -22,9 +24,11 @@ const onlyPublic = process.argv.includes('--public');
 const onlyNavigation = process.argv.includes('--navigation');
 const onlyMcp = process.argv.includes('--mcp');
 const iconsOnly = process.argv.includes('--icons-only');
+const onlyUi = process.argv.includes('--ui');
+const withPreview = onlyUi && process.argv.includes('--preview');
 const dir = new URL('../../artifacts/e2e/', import.meta.url);
 await mkdir(dir, { recursive: true });
-const report = new URL(`${onlyMcp ? 'mcp' : onlyPublic ? 'public' : onlySharing ? 'sharing' : onlyNavigation ? 'navigation' : baseline ? 'before' : 'report'}.json`, dir);
+const report = new URL(`${onlyUi ? 'ui' : onlyMcp ? 'mcp' : onlyPublic ? 'public' : onlySharing ? 'sharing' : onlyNavigation ? 'navigation' : baseline ? 'before' : 'report'}.json`, dir);
 const started = new Date().toISOString();
 await writeFile(report, JSON.stringify({ image, started, status: 'running' }, null, 2));
 const docker = (...args) =>
@@ -52,6 +56,7 @@ let browser;
 let page;
 const checks = [];
 const errors = [];
+let previewPath;
 async function checkHeader(count) {
     const header = page.locator('#app-header');
     assert.equal(
@@ -170,7 +175,11 @@ try {
         })
     );
     browser = await chromium.launch(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {});
-    if (onlyMcp) {
+    if (onlyUi) {
+        const result = await ui({ browser, base, jwt, dir });
+        checks.push(result.message);
+        previewPath = result.path;
+    } else if (onlyMcp) {
         checks.push(...await auth({ base, browser, jwt, fixture, bearer }));
         checks.push(await tree({ browser, base, jwt, dir }));
         checks.push(await mcp({ browser, base, jwt, dir, fixture }));
@@ -1092,6 +1101,11 @@ try {
         )
     );
     console.log(JSON.stringify({ image, checks, errors }, null, 2));
+    if (withPreview) {
+        await browser.close();
+        browser = null;
+        await preview({ base, jwt, path: previewPath });
+    }
 } catch (error) {
     await writeFile(
         report,

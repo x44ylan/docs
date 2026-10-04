@@ -15,7 +15,7 @@ import DocumentPlus from '@/icons/DocumentPlus.vue';
 import FolderPlus from '@/icons/FolderPlus.vue';
 import PencilSquare from '@/icons/PencilSquare.vue';
 import Spinner from '@/icons/Spinner.vue';
-import { Share2 } from 'lucide-vue-next';
+import { Plus, Share2 } from 'lucide-vue-next';
 import { useLayoutStore } from '@/stores/layout';
 import { useVaultStore } from '@/stores/vault';
 import { useVaultTreeStore } from '@/stores/vaultTree';
@@ -168,19 +168,34 @@ provide('vaultTreeDragAndDrop', {
 </script>
 
 <template>
-    <div class="relative flex h-full w-full flex-col text-sm" @keydown.esc="onDragEnd">
+    <div class="text-muted-foreground relative flex h-full w-full flex-col text-sm sm:text-[13px]" @keydown.esc="onDragEnd">
         <div v-if="layoutStore.isTreeViewLoading" class="absolute inset-0 z-30"></div>
-        <div class="flex shrink-0 flex-col gap-2 p-4">
+        <div class="flex shrink-0 flex-col gap-2 px-3 py-2">
             <div class="flex w-full items-center justify-between gap-2">
                 <div
-                    class="flex-grow truncate pl-1 text-lg font-semibold"
+                    class="text-foreground min-w-0 flex-1 truncate text-[15px] font-semibold"
                     :title="vaultStore.name ?? ''"
                 >
                     {{ vaultStore.name }}
                 </div>
 
                 <div class="flex shrink-0 items-center gap-1">
-                    <Button variant="ghost" size="icon" aria-label="Collaboration" title="Collaboration"
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        class="size-11 shrink-0 sm:size-9"
+                        aria-label="New note"
+                        title="New note"
+                        @click="openModal(VaultNodeCreateModal, {
+                            title: 'New note',
+                            vaultId,
+                            parentId: null,
+                            isFile: true,
+                        })"
+                    >
+                        <Plus class="size-4 sm:size-3.5" aria-hidden="true" />
+                    </Button>
+                    <Button variant="ghost" size="icon" class="size-11 sm:size-9" aria-label="Collaboration" title="Collaboration"
                         @click="openModal(VaultCollaborationModal, { title: 'Collaboration', top: true, vaultId })">
                         <Share2 class="size-3.5" aria-hidden="true" />
                     </Button>
@@ -190,8 +205,8 @@ provide('vaultTreeDragAndDrop', {
                     />
                     <Menu v-else type="dropdown">
                         <template #trigger>
-                            <Button variant="ghost" size="icon" class="size-11" aria-label="Vault menu" title="Vault menu">
-                                <Bars3 class="size-4.5" aria-hidden="true" />
+                            <Button variant="ghost" size="icon" class="size-11 sm:size-9" aria-label="Vault menu" title="Vault menu">
+                                <Bars3 class="size-4 sm:size-3.5" aria-hidden="true" />
                             </Button>
                         </template>
 
@@ -257,9 +272,9 @@ provide('vaultTreeDragAndDrop', {
             </div>
         </div>
 
-        <div id="vault-tree-scroll-container" aria-label="Documents" class="mb-4 min-h-0 flex-1 overflow-y-auto"
+        <div id="vault-tree-scroll-container" aria-label="Documents" class="mb-2 min-h-0 flex-1 overflow-y-auto"
             @dragleave="onLeave">
-            <div class="min-h-full px-3" @dragover.self.prevent="onDragOverRoot" @drop.self="onDrop">
+            <div class="min-h-full px-2" @dragover.self.prevent="onDragOverRoot" @drop.self="onDrop">
                 <VaultTreeNode v-for="id in children" :key="id" :node-id="id" :depth="0" />
                 <div v-if="draggingNodeId" class="text-muted-foreground mt-2 flex min-h-11 items-center justify-center rounded-md border border-dashed px-2 text-xs"
                     :class="isValidDropAfter ? 'border-ring bg-accent text-foreground' : 'border-border'"

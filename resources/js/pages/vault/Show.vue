@@ -41,7 +41,7 @@ import { VaultShowPageProps } from '@/types/vault.pages';
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import { useEcho } from '@laravel/echo-vue';
 import { storeToRefs } from 'pinia';
-import { onMounted, provide, ref, shallowRef, watch } from 'vue';
+import { computed, onMounted, provide, ref, shallowRef, watch } from 'vue';
 
 defineOptions({ layout: AuthLayout });
 
@@ -74,6 +74,15 @@ useContentWidthPreference(mainSectionRef);
 syncPanelsWithScreen(isSmallScreen.value);
 
 const openedFile = ref(props.openedFile ?? null);
+const documentPath = computed(() => {
+    const parts = [
+        vaultStore.name || props.vault.name,
+        ...(openedFile.value?.ancestors ?? []).map(node => vaultTreeStore.getNodeById(node.id)?.name ?? node.name),
+        ...(openedFile.value ? [openedFile.value.file.name] : []),
+    ];
+    return parts.length > 1 && parts[0].toLowerCase() === parts[1].toLowerCase()
+        ? parts.slice(1) : parts;
+});
 const fileComponents = {
     note: VaultFileNote,
     image: VaultFileImage,
@@ -264,6 +273,11 @@ useEcho<{ data: { user_id: number } }>(
             </button>
         </div>
         <div id="file-header" class="flex min-w-0 flex-1 items-center sm:hidden"></div>
+        <div class="text-muted-foreground hidden min-w-0 flex-1 items-center gap-1.5 text-xs sm:flex" aria-label="Document path" :title="documentPath.join(' / ')">
+            <span v-if="documentPath.length > 1" class="min-w-0 truncate">{{ documentPath.slice(0, -1).join(' / ') }}</span>
+            <span v-if="documentPath.length > 1" aria-hidden="true" class="text-muted-foreground/60">/</span>
+            <span class="text-foreground min-w-0 truncate font-medium">{{ documentPath.at(-1) }}</span>
+        </div>
         <div class="flex shrink-0 items-center gap-1">
             <button
                 class="hover:bg-accent hover:text-accent-foreground inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors"
@@ -296,12 +310,12 @@ useEcho<{ data: { user_id: number } }>(
 
     <aside
         scroll-region
-        class="bg-popover absolute top-0 bottom-0 left-0 z-30 w-[80%] max-w-[300px] overflow-y-auto rounded-r transition-all duration-300 ease-in-out lg:static lg:max-w-[300px] print:hidden"
+        class="bg-popover border-border/60 absolute top-0 bottom-0 left-0 z-30 w-[80%] max-w-[300px] overflow-y-auto border-r transition-all duration-300 ease-in-out lg:static lg:max-w-[240px] print:hidden"
         :class="{
             '-translate-x-full': isSmallScreen && !isLeftPanelOpen,
             'translate-x-0': isSmallScreen && isLeftPanelOpen,
             'lg:w-0 lg:min-w-0': !isLeftPanelOpen,
-            'lg:w-[20%] lg:min-w-[240px]': isLeftPanelOpen,
+            'lg:w-[240px] lg:min-w-[240px]': isLeftPanelOpen,
         }"
     >
         <VaultTree
@@ -319,7 +333,7 @@ useEcho<{ data: { user_id: number } }>(
         <div v-if="layoutStore.isFileLoading" role="status" aria-label="Loading document" class="pointer-events-none absolute inset-x-0 top-0 z-20 h-px animate-pulse bg-foreground/40 motion-reduce:animate-none"></div>
         <div
             class="mx-auto flex h-full w-full flex-col transition-all duration-300 ease-in-out"
-            :class="layoutStore.isContentWidthFull ? 'max-w-full' : 'max-w-[48rem]'"
+            :class="layoutStore.isContentWidthFull ? 'max-w-full' : 'max-w-[46rem]'"
         >
             <VaultFile
                 v-if="openedFile"

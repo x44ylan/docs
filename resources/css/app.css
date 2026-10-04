@@ -410,9 +410,40 @@
     @apply [scrollbar-width:none] [&::-webkit-scrollbar]:hidden;
 }
 
+/* Document typography stays separate from dialogs, previews and home cards. */
+.note-content .tiptap {
+    font-size: 15px;
+    line-height: 1.8;
+}
+
+.note-content .tiptap > :first-child {
+    margin-top: 0;
+}
+
+.note-content .tiptap p {
+    margin-block: 1em;
+}
+
+@layer base {
+    .note-content .tiptap h1 {
+        font-size: 1.5em !important;
+    }
+}
+
+.note-content .tiptap h2 {
+    font-size: 1.2em;
+}
+
+@media (width < 640px) {
+    .note-content .tiptap {
+        font-size: 14px;
+        line-height: 1.75;
+    }
+}
+
 /* ---------------------------------------------------------------------------
  * Docs design tokens (shadcn-style, CloseView palette)
- * Dark mirrors closeview/internal/server/websrc/styles.css exactly.
+ * Quiet charcoal surfaces based on CloseView's grayscale palette.
  * Light is the neutral counterpart of the same family.
  * ------------------------------------------------------------------------- */
 :root {
@@ -441,11 +472,11 @@
 
 .dark {
     color-scheme: dark;
-    --background: #0c0c0e;
+    --background: #121214;
     --foreground: #e7e7e9;
     --card: #131315;
     --card-foreground: #e7e7e9;
-    --popover: #131315;
+    --popover: #18181b;
     --popover-foreground: #e7e7e9;
     --primary: #f5f5f5;
     --primary-foreground: #111113;

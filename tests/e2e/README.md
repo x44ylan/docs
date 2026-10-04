@@ -2,6 +2,17 @@
 
 ## Failure cases to cover before changing the implementation
 
+- Reference-inspired editor polish must preserve the existing editor, nested-note
+  navigation and autosave. Keep search only in the top-right header, with no sidebar
+  search button or empty search row. The new-note shortcut belongs beside the vault
+  header controls. Header search/new-note shortcuts must reuse the existing
+  dialogs, restore keyboard focus and stay usable at 320/390px without shrinking
+  touch targets. Breadcrumbs must follow note switches, rename and history without
+  duplicates or layout shifts. Muted chrome must retain readable contrast in both
+  themes; sidebar boundaries, selected rows, document measure and formatting menus
+  must remain clear. Verify screenshots on phones and desktop using disposable
+  content only. Do not commit, push, deploy, or change live notes for this preview.
+
 - Collaboration must be a separate icon beside the vault menu, accessible by
   touch/keyboard at 320px and desktop widths, with no duplicate dropdown entry.
 - The Access picker's Public means all verified Docs users, not anonymous access. Existing/new
@@ -186,6 +197,11 @@ the `public-` prefix.
 Run `node tests/e2e/run.mjs docs:review --navigation` for main-note landing and
 SPA navigation. Its report is `artifacts/e2e/navigation.json`; landing screenshots
 use the `vault-main-` prefix.
+Run `node tests/e2e/run.mjs docs:ui --ui` for visual polish checks and screenshots
+at 320/390/1440px in both themes. Its report is `artifacts/e2e/ui.json`.
+Add `--preview` to expose the disposable sample workspace through a temporary
+Cloudflare Quick Tunnel for 50 minutes. The preview proxy blocks writes and unrelated
+routes; no production data, keys, volumes or tunnel configuration are used.
 Run `node tests/e2e/run.mjs docs:review --mcp` for MCP identity, move and browser
 tree regression checks. The report is `artifacts/e2e/mcp.json`; moved-note
 screenshots use the `mcp-` prefix. Tests use only disposable notes and identities.

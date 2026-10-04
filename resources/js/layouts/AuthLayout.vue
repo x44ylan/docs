@@ -21,7 +21,7 @@ watch(
 <template>
     <AppLayout>
         <header
-            class="bg-background/95 text-foreground border-border relative z-40 h-15 shrink-0 border-b backdrop-blur print:hidden"
+            class="bg-background text-muted-foreground border-border/60 relative z-40 h-15 shrink-0 border-b print:hidden"
         >
             <div id="app-header" class="flex h-full min-w-0 items-center justify-between gap-3 px-4"></div>
         </header>
