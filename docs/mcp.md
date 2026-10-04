@@ -8,6 +8,15 @@ or shared API key is needed.
 `create` accepts `parentId` for a note or folder. `list` returns `parent_id`,
 so agents see the same nested document structure as the sidebar.
 
+`move` accepts `noteId` and `parentId` to move an existing note and its sub-notes
+under a note or folder in the same vault. Use `parentId: null` to return it to the
+vault root. IDs, attachments and links are preserved; duplicate names receive a
+suffix, returned with the updated `parent_id`. It uses your existing vault access.
+
+```json
+{"name":"move","arguments":{"noteId":42,"parentId":14}}
+```
+
 For Codex:
 
 ```sh

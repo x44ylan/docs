@@ -13,16 +13,18 @@ import { markdown } from './markdown.mjs';
 import { icons } from './icons.mjs';
 import { sharing } from './sharing.mjs';
 import { publicLinks } from './public.mjs';
+import { mcp } from './mcp.mjs';
 
 const image = process.argv[2] ?? 'docs:review';
 const baseline = process.argv.includes('--baseline');
 const onlySharing = process.argv.includes('--sharing');
 const onlyPublic = process.argv.includes('--public');
 const onlyNavigation = process.argv.includes('--navigation');
+const onlyMcp = process.argv.includes('--mcp');
 const iconsOnly = process.argv.includes('--icons-only');
 const dir = new URL('../../artifacts/e2e/', import.meta.url);
 await mkdir(dir, { recursive: true });
-const report = new URL(`${onlyPublic ? 'public' : onlySharing ? 'sharing' : onlyNavigation ? 'navigation' : baseline ? 'before' : 'report'}.json`, dir);
+const report = new URL(`${onlyMcp ? 'mcp' : onlyPublic ? 'public' : onlySharing ? 'sharing' : onlyNavigation ? 'navigation' : baseline ? 'before' : 'report'}.json`, dir);
 const started = new Date().toISOString();
 await writeFile(report, JSON.stringify({ image, started, status: 'running' }, null, 2));
 const docker = (...args) =>
@@ -168,7 +170,11 @@ try {
         })
     );
     browser = await chromium.launch(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {});
-    if (onlyPublic) {
+    if (onlyMcp) {
+        checks.push(...await auth({ base, browser, jwt, fixture, bearer }));
+        checks.push(await tree({ browser, base, jwt, dir }));
+        checks.push(await mcp({ browser, base, jwt, dir, fixture }));
+    } else if (onlyPublic) {
         checks.push(await publicLinks({ browser, base, jwt, dir, fixture }));
     } else if (onlySharing) {
         checks.push(await sharing({ browser, base, jwt, dir, socketPort }));
@@ -1017,7 +1023,7 @@ try {
             (await rpc('initialize', { protocolVersion: '2025-11-25' })).serverInfo.name,
             'Docs'
         );
-        assert.equal((await rpc('tools/list')).tools.length, 7);
+        assert.equal((await rpc('tools/list')).tools.length, 8);
         const call = (name, args) => rpc('tools/call', { name, arguments: args });
         const vaults = JSON.parse((await call('vaults', {})).content[0].text).data;
         assert(fixture.vaults.slice(0, 5).every((id) => vaults.some((v) => v.id === id)));
@@ -1057,6 +1063,7 @@ try {
             403
         );
         checks.push('Unauthenticated browser requests remain blocked');
+        checks.push(await mcp({ browser, base, jwt, dir, fixture }));
         checks.push(await tree({ browser, base, jwt, dir }));
         checks.push(await navigation({ browser, base, jwt, dir }));
         checks.push(await markdown({ browser, base, jwt, dir }));

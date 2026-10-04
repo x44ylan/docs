@@ -65,6 +65,11 @@
 - Validation/server errors close a form and discard its contents; repeat submits race.
 - Creating, renaming, deleting, exporting, or opening documents stops working.
 - MCP schemas differ from accepted arguments; reads/writes stop working after refactoring.
+- MCP moves must require an explicit note and destination (null means vault root),
+  preserve IDs, content, children, attachment bytes and backlinks, and handle
+  duplicate names without overwrites. Repeated moves must be safe. Reject cycles,
+  missing/attachment/cross-vault destinations, inaccessible or revoked notes,
+  invalid types and unexpected arguments. Browser moves must remain unchanged.
 - Authenticated requests fail, or unauthenticated requests enter the workspace.
 - Browser and MCP resolve the same verified email to different user IDs or vaults.
 - MCP accepts the retired agent credential, a service identity, another Access
@@ -181,6 +186,9 @@ the `public-` prefix.
 Run `node tests/e2e/run.mjs docs:review --navigation` for main-note landing and
 SPA navigation. Its report is `artifacts/e2e/navigation.json`; landing screenshots
 use the `vault-main-` prefix.
+Run `node tests/e2e/run.mjs docs:review --mcp` for MCP identity, move and browser
+tree regression checks. The report is `artifacts/e2e/mcp.json`; moved-note
+screenshots use the `mcp-` prefix. Tests use only disposable notes and identities.
 Anonymous links require a separate Cloudflare Access application for
 `docs.x44ylan.com/share/*` with Bypass → Everyone; keep the main application
 authenticated. In Collaboration, create a Public link to publish a vault

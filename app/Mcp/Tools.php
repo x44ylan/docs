@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Mcp;
 
 use App\Actions\CreateVaultNode;
+use App\Actions\MoveVaultNode;
 use App\Actions\UpdateVaultNode;
 use App\Models\User;
 use App\Models\Vault;
@@ -34,13 +35,14 @@ final class Tools
             ['read', 'Read a Markdown document.', ['noteId' => $id], ['noteId']],
             ['create', 'Create a Markdown document in an accessible vault.', ['vaultId' => $id, 'parentId' => $id, 'name' => ['type' => 'string', 'minLength' => 1, 'maxLength' => 255], 'content' => $text], ['vaultId', 'name', 'content']],
             ['update', 'Append (default), prepend or explicitly replace Markdown content.', ['noteId' => $id, 'content' => $text, 'operation' => ['type' => 'string', 'enum' => ['append', 'prepend', 'replace'], 'default' => 'append']], ['noteId', 'content']],
+            ['move', 'Move a Markdown document and its sub-notes under a note or folder in the same vault. Set parentId to null for the vault root. Preserves IDs, attachments and links; duplicate names receive a suffix. Returns the new name and parent_id.', ['noteId' => $id, 'parentId' => ['type' => ['integer', 'null'], 'minimum' => 1]], ['noteId', 'parentId']],
         ];
 
         /** @var non-empty-list<array<string, mixed>> $tools */
         $tools = array_map(fn (array $tool): array => [
             'name' => $tool[0], 'description' => $tool[1],
             'inputSchema' => ['type' => 'object', 'properties' => (object) $tool[2], 'required' => $tool[3], 'additionalProperties' => false],
-            'annotations' => ['readOnlyHint' => ! in_array($tool[0], ['create', 'update']), 'destructiveHint' => $tool[0] === 'update', 'openWorldHint' => false],
+            'annotations' => ['readOnlyHint' => ! in_array($tool[0], ['create', 'update', 'move']), 'destructiveHint' => $tool[0] === 'update', 'openWorldHint' => false],
         ], $definitions);
 
         return $tools;
@@ -60,14 +62,15 @@ final class Tools
                 throw ValidationException::withMessages(['arguments' => 'Unexpected tool arguments.']);
             }
             foreach ($args as $field => $value) {
-                if (($schema[$field]['type'] ?? '') === 'integer' && ! is_int($value)) {
+                $types = (array) ($schema[$field]['type'] ?? []);
+                if (in_array('integer', $types, true) && ! is_int($value) && ! ($value === null && in_array('null', $types, true))) {
                     throw ValidationException::withMessages([$field => "The {$field} field must be an integer."]);
                 }
             }
             $data = Validator::make($args, [
                 'vaultId' => [in_array($name, ['list', 'create']) ? 'required' : 'sometimes', 'integer', 'min:1'],
-                'noteId' => [in_array($name, ['read', 'update']) ? 'required' : 'sometimes', 'integer', 'min:1'],
-                'parentId' => ['sometimes', 'integer', 'min:1'],
+                'noteId' => [in_array($name, ['read', 'update', 'move']) ? 'required' : 'sometimes', 'integer', 'min:1'],
+                'parentId' => $name === 'move' ? ['present', 'nullable', 'integer', 'min:1'] : ['sometimes', 'integer', 'min:1'],
                 'page' => ['sometimes', 'integer', 'min:1', 'max:100000'],
                 'query' => [$name === 'search' ? 'required' : 'sometimes', 'string', 'min:1', 'max:200'],
                 'name' => [$name === 'create' ? 'required' : 'sometimes', 'string', 'min:1', 'max:255', new VaultNodeName],
@@ -109,6 +112,12 @@ final class Tools
                 abort_unless($note instanceof VaultNode, 404);
                 if ($name === 'read') {
                     $result = $note->only(['id', 'vault_id', 'name', 'content', 'updated_at']);
+                } elseif ($name === 'move') {
+                    abort_unless($user->can('update', $note->vault), 403);
+                    $result = Cache::lock('docs.note.'.$note->id, 30)->block(5, fn () => app(MoveVaultNode::class)->handle(
+                        $note,
+                        is_int($data['parentId'] ?? null) ? $data['parentId'] : null,
+                    )->toArray());
                 } else {
                     abort_unless($user->can('update', $note->vault), 403);
                     $result = Cache::lock('docs.note.'.$note->id, 30)->block(5, function () use ($note, $data): array {
