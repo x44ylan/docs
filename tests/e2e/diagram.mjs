@@ -1,3 +1,4 @@
+import { options } from './editor.mjs';
 import assert from 'node:assert/strict';
 
 export async function diagram(page, dir) {
@@ -20,7 +21,7 @@ export async function diagram(page, dir) {
     const source = JSON.stringify(spec, null, 2);
     const markdown = `# Diagrams\n\n\`\`\`archify\n${source}\n\`\`\`\n\nAfter diagram.`;
     async function mode(name) {
-        await page.getByRole('button', { name: 'More editor options', exact: true }).click();
+        await options(page);
         await page.getByRole('menuitem', { name, exact: true }).click();
     }
     async function setSource(value) {

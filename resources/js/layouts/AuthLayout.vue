@@ -23,7 +23,7 @@ watch(
         <header
             class="bg-background text-muted-foreground border-border/60 relative z-40 h-15 shrink-0 border-b print:hidden"
         >
-            <div id="app-header" class="flex h-full min-w-0 items-center justify-between gap-3 px-4"></div>
+            <div id="app-header" class="flex h-full min-w-0 items-center justify-between gap-1 px-2 sm:gap-3 sm:px-4"></div>
         </header>
 
         <main class="bg-background relative flex min-h-0 min-w-0 flex-1 overflow-hidden">

@@ -28,12 +28,12 @@ export async function ui({ browser, base, jwt, dir }) {
         await page.goto(`${base}${path}?file=${child.id}`);
         await page.locator('.tiptap').getByRole('heading', { name: 'Architecture', exact: true }).waitFor();
         const breadcrumb = page.getByLabel('Document path', { exact: true });
-        assert.match(await breadcrumb.innerText(), /Design notes.*Getting started.*Architecture/s);
+        assert.match(await breadcrumb.getAttribute('title'), /Design notes.*Getting started.*Architecture/s);
         const title = page.getByRole('textbox', { name: 'Document title', exact: true });
         const saved = page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().includes(`/nodes/${child.id}`));
         await title.fill('System design');
         assert.equal((await saved).status(), 200);
-        await page.waitForFunction(() => document.querySelector('[aria-label="Document path"]')?.textContent.includes('System design'));
+        await page.waitForFunction(() => document.querySelector('[aria-label="Document path"]')?.getAttribute('title').includes('System design'));
         await page.locator('aside').getByTitle('Design notes', { exact: true }).last().click();
         await page.locator('.tiptap').getByRole('heading', { name: 'A calmer place to think' }).waitFor();
         for (const width of [320, 390, 1440]) {
@@ -45,8 +45,18 @@ export async function ui({ browser, base, jwt, dir }) {
                 assert.equal(await page.locator('#app-header').evaluate(el => el.parentElement.getBoundingClientRect().height), 60);
                 const editorSize = await page.locator('.tiptap').evaluate(el => getComputedStyle(el).fontSize);
                 assert.equal(editorSize, width < 640 ? '14px' : '15px');
-                assert.equal(await title.evaluate(el => getComputedStyle(el).fontSize), '16px', 'Editable title avoids Safari input zoom');
+                assert.equal(await title.evaluate(el => getComputedStyle(el).fontSize), width < 1024 ? '16px' : '14px', 'Phone title avoids Safari input zoom');
                 await page.screenshot({ path: new URL(`ui-editor-${width}-${theme}.png`, dir).pathname, animations: 'disabled' });
+                if (width < 1024) {
+                    await page.getByRole('button', { name: 'Show formatting', exact: true }).click();
+                    await page.screenshot({ path: new URL(`ui-tools-${width}-${theme}.png`, dir).pathname, animations: 'disabled' });
+                    const strip = page.getByRole('group', { name: 'Document formatting' });
+                    assert(await strip.evaluate(el => { const box = el.getBoundingClientRect(); return box.width >= 170 && box.left >= 0 && box.right <= innerWidth; }));
+                    await page.getByRole('button', { name: 'More editor options', exact: true }).scrollIntoViewIfNeeded();
+                    assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+                    await page.getByRole('button', { name: 'Close formatting', exact: true }).click();
+                    assert(await title.isVisible());
+                }
                 if (width < 1024) await page.getByRole('button', { name: 'Toggle document tree' }).click();
                 assert.equal(await page.getByRole('button', { name: 'Search this vault', exact: true }).count(), 0);
                 const search = page.getByRole('button', { name: 'Search documents', exact: true });

@@ -1,3 +1,4 @@
+import { options } from './editor.mjs';
 import assert from 'node:assert/strict';
 
 export async function navigation({ browser, base, jwt, dir }) {
@@ -142,7 +143,7 @@ export async function navigation({ browser, base, jwt, dir }) {
         await editor.press('Control+End');
         await page.keyboard.type(' typed just now');
         const mode = async name => {
-            await page.getByRole('button', { name: 'More editor options', exact: true }).click();
+            await options(page);
             await page.getByRole('menuitem', { name, exact: true }).click();
         };
         await mode('Markdown source');
@@ -186,7 +187,8 @@ export async function navigation({ browser, base, jwt, dir }) {
         const beforeClose = visits.length;
         await editor.fill('Charlie draft saved on return');
         await page.evaluate(() => { window.mainReturnProbe = { header: document.querySelector('#app-header'), aside: document.querySelector('aside') }; });
-        await page.getByTitle('Close file', { exact: true }).click();
+        await options(page);
+        await page.getByRole('menuitem', { name: 'Close file', exact: true }).click();
         await ready('navigation', 'Vault overview');
         assert.equal(visits.length, beforeClose + 1, 'Returning to the vault fetches only its main note');
         assert.equal(visits.at(-1).headers()['x-inertia-partial-data'], 'openedFile');

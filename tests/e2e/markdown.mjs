@@ -1,3 +1,4 @@
+import { options } from './editor.mjs';
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 
@@ -60,7 +61,7 @@ export async function markdown({ browser, base, jwt, dir }) {
         await editor.waitFor();
         const source = page.getByRole('textbox', { name: 'Markdown source', exact: true });
         const mode = async name => {
-            await page.getByRole('button', { name: 'More editor options', exact: true }).click();
+            await options(page);
             await page.getByRole('menuitem', { name, exact: true }).click();
         };
         const read = async () => {

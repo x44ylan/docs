@@ -7,6 +7,8 @@ import { useEditor } from '@/composables/useEditor';
 import { useModalManager } from '@/composables/useModalManager';
 import { useRequest } from '@/composables/useRequest';
 import { useTiptapPreferences } from '@/composables/useTiptapPreferences';
+import { useScreenSize } from '@/composables/useScreenSize';
+import { useVaultActions } from '@/composables/useVaultActions';
 import AlignCenter from '@/icons/AlignCenter.vue';
 import AlignLeft from '@/icons/AlignLeft.vue';
 import AlignRight from '@/icons/AlignRight.vue';
@@ -31,7 +33,9 @@ import ListOrdered from '@/icons/ListOrdered.vue';
 import ListTodo from '@/icons/ListTodo.vue';
 import Markdown from '@/icons/Markdown.vue';
 import Outdent from '@/icons/Outdent.vue';
-import { Eye, PenLine, Ellipsis } from 'lucide-vue-next';
+import { Eye, PenLine, Ellipsis, ChevronRight, ArrowLeft, Home, Maximize, X, Check, Type } from 'lucide-vue-next';
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { router } from '@inertiajs/vue3';
 import Pilcrow from '@/icons/Pilcrow.vue';
 import Print from '@/icons/Print.vue';
 import Quote from '@/icons/Quote.vue';
@@ -47,7 +51,7 @@ import Template from '@/icons/Template.vue';
 import Text from '@/icons/Text.vue';
 import Undo from '@/icons/Undo.vue';
 import { useLayoutStore } from '@/stores/layout';
-import { computed, inject, type ShallowRef } from 'vue';
+import { computed, inject, nextTick, ref, watch, type Component, type ShallowRef } from 'vue';
 import MarkdownToolbarButton from './MarkdownToolbarButton.vue';
 import MarkdownToolbarItemDivider from './MarkdownToolbarItemDivider.vue';
 import MarkdownToolbarSubButton from './MarkdownToolbarSubButton.vue';
@@ -55,11 +59,15 @@ import MarkdownToolbarSubButton from './MarkdownToolbarSubButton.vue';
 const props = defineProps<{
     vaultId: number;
     nodeId: number;
+    expanded: boolean;
 }>();
+const emit = defineEmits<{ toggle: [] }>();
 
 const editorContext = inject<ShallowRef<ReturnType<typeof useEditor> | null>>('editorContext');
 
 const layoutStore = useLayoutStore();
+const vaultActions = useVaultActions();
+const { isSmallScreen } = useScreenSize();
 const { openModal } = useModalManager();
 const { isEditMode, isEditingMarkdown, toggleEditMode, toggleEditingMarkdown } =
     useTiptapPreferences();
@@ -69,6 +77,16 @@ const applyTemplateForm = useRequest<{ node_id: number }>({ node_id: props.nodeI
 const editor = computed(() => editorContext?.value?.editor.value ?? null);
 
 const isToolbarLocked = computed(() => !isEditMode.value || isEditingMarkdown.value);
+const marks = ref({ bold: false, italic: false });
+watch(editor, (instance, _, cleanup) => {
+    const update = () => {
+        marks.value.bold = !!instance?.isActive('bold');
+        marks.value.italic = !!instance?.isActive('italic');
+    };
+    update();
+    instance?.on('transaction', update);
+    cleanup(() => { instance?.off('transaction', update); });
+}, { immediate: true });
 
 function undo(): void {
     editor.value?.chain().focus().undo().run();
@@ -285,289 +303,152 @@ function setTableColumnAlignment(alignment: 'left' | 'center' | 'right'): void {
 function print(): void {
     globalThis.print();
 }
+
+type Tool = { title: string; icon: Component; run: () => void; rotate?: boolean };
+type ToolGroup = { title: string; icon: Component; items: (Tool | null)[] };
+const moreOpen = ref(false);
+const selectedGroup = ref<ToolGroup | null>(null);
+const moreContent = ref<HTMLElement | null>(null);
+watch(moreOpen, open => { if (!open) selectedGroup.value = null; });
+watch(isSmallScreen, () => { moreOpen.value = false; });
+watch(() => props.expanded, () => { moreOpen.value = false; });
+
+function selectGroup(group: ToolGroup | null, event: Event): void {
+    event.preventDefault();
+    selectedGroup.value = group;
+    nextTick(() => moreContent.value?.querySelectorAll<HTMLElement>('[role="menuitem"]')[group ? 1 : 0]?.focus());
+}
+
+const groups: ToolGroup[] = [
+    { title: 'Heading', icon: Heading, items: [
+        { title: 'Heading 1', icon: Heading1, run: () => toggleHeading(1) },
+        { title: 'Heading 2', icon: Heading2, run: () => toggleHeading(2) },
+        { title: 'Heading 3', icon: Heading3, run: () => toggleHeading(3) },
+        { title: 'Heading 4', icon: Heading4, run: () => toggleHeading(4) },
+        { title: 'Heading 5', icon: Heading5, run: () => toggleHeading(5) },
+        { title: 'Heading 6', icon: Heading6, run: () => toggleHeading(6) },
+    ] },
+    { title: 'Block styles', icon: Pilcrow, items: [
+        { title: 'Paragraph', icon: Pilcrow, run: setParagraph },
+        { title: 'Quote', icon: Quote, run: toggleBlockquote },
+        { title: 'Code block', icon: Code, run: toggleCodeBlock },
+    ] },
+    { title: 'Text styles', icon: Text, items: [
+        { title: 'Bold', icon: Bold, run: toggleBold },
+        { title: 'Italic', icon: Italic, run: toggleItalic },
+        { title: 'Strike', icon: Strike, run: toggleStrike },
+        { title: 'Inline code', icon: CodeInline, run: toggleCode },
+    ] },
+    { title: 'Lists', icon: List, items: [
+        { title: 'List', icon: List, run: toggleBulletList },
+        { title: 'Ordered list', icon: ListOrdered, run: toggleOrderedList },
+        { title: 'Task list', icon: ListTodo, run: toggleTaskList },
+        { title: 'Indent', icon: Indent, run: indentList },
+        { title: 'Outdent', icon: Outdent, run: outdentList },
+    ] },
+    { title: 'Insert', icon: DocumentPlus, items: [
+        { title: 'Link', icon: Link, run: openSearchFileModal },
+        { title: 'Image', icon: Image, run: openSearchImageModal },
+        { title: 'Horizontal rule', icon: HorizontalRule, run: setHorizontalRule },
+        { title: 'Template', icon: Template, run: openTemplateListModal },
+    ] },
+    { title: 'Tables', icon: TableAdd, items: [
+        { title: 'Insert table', icon: TableAdd, run: insertTable },
+        { title: 'Delete table', icon: TableDelete, run: deleteTable },
+        null,
+        { title: 'Add column before', icon: TableAddColumn, run: addColumnBefore, rotate: true },
+        { title: 'Add column after', icon: TableAddColumn, run: addColumnAfter },
+        { title: 'Delete column', icon: TableDeleteColumn, run: deleteColumn },
+        { title: 'Add row before', icon: TableAddRow, run: addRowBefore, rotate: true },
+        { title: 'Add row after', icon: TableAddRow, run: addRowAfter },
+        { title: 'Delete row', icon: TableDeleteRow, run: deleteRow },
+        null,
+        { title: 'Align left', icon: AlignLeft, run: () => setTableColumnAlignment('left') },
+        { title: 'Align center', icon: AlignCenter, run: () => setTableColumnAlignment('center') },
+        { title: 'Align right', icon: AlignRight, run: () => setTableColumnAlignment('right') },
+    ] },
+];
 </script>
 
 <template>
-    <div
-        class="text-muted-foreground border-border/60 flex min-w-0 items-center gap-1 border-b pb-1"
-        role="group"
-        aria-label="Document formatting"
-    >
-        <div class="min-w-0 flex-1 overflow-x-auto">
-            <div class="flex w-max gap-0.5">
-                <MarkdownToolbarButton
-                    title="Undo"
-                    :icon="Undo"
-                    :disabled="isToolbarLocked"
-                    @click="undo"
-                />
-                <MarkdownToolbarButton
-                    title="Redo"
-                    :icon="Redo"
-                    :disabled="isToolbarLocked"
-                    @click="redo"
-                />
-                <Menu :disabled="isToolbarLocked">
-                    <template #trigger>
-                        <MarkdownToolbarButton
-                            title="Heading"
-                            :icon="Heading"
-                            :disabled="isToolbarLocked"
-                        />
-                    </template>
-                    <div class="flex flex-col">
-                        <MarkdownToolbarSubButton
-                            :icon="Heading1"
-                            title="Heading 1"
-                            @click="toggleHeading(1)"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="Heading2"
-                            title="Heading 2"
-                            @click="toggleHeading(2)"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="Heading3"
-                            title="Heading 3"
-                            @click="toggleHeading(3)"
-                        />
-                    </div>
-                    <div class="flex flex-col">
-                        <MarkdownToolbarSubButton
-                            :icon="Heading4"
-                            title="Heading 4"
-                            @click="toggleHeading(4)"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="Heading5"
-                            title="Heading 5"
-                            @click="toggleHeading(5)"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="Heading6"
-                            title="Heading 6"
-                            @click="toggleHeading(6)"
-                        />
-                    </div>
-                </Menu>
-                <Menu :disabled="isToolbarLocked">
-                    <template #trigger>
-                        <MarkdownToolbarButton
-                            :icon="Pilcrow"
-                            title="Block styles"
-                            :disabled="isToolbarLocked"
-                        />
-                    </template>
-                    <div class="flex flex-col">
-                        <MarkdownToolbarSubButton
-                            :icon="Pilcrow"
-                            title="Paragraph"
-                            @click="setParagraph"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="Quote"
-                            title="Quote"
-                            @click="toggleBlockquote"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="Code"
-                            title="Code block"
-                            @click="toggleCodeBlock"
-                        />
-                    </div>
-                </Menu>
-                <Menu :disabled="isToolbarLocked">
-                    <template #trigger>
-                        <MarkdownToolbarButton
-                            :icon="Text"
-                            title="Text styles"
-                            :disabled="isToolbarLocked"
-                        />
-                    </template>
-                    <div class="flex flex-col">
-                        <MarkdownToolbarSubButton :icon="Bold" title="Bold" @click="toggleBold" />
-                        <MarkdownToolbarSubButton
-                            :icon="Italic"
-                            title="Italic"
-                            @click="toggleItalic"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="Strike"
-                            title="Strike"
-                            @click="toggleStrike"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="CodeInline"
-                            title="Inline code"
-                            @click="toggleCode"
-                        />
-                    </div>
-                </Menu>
-                <Menu :disabled="isToolbarLocked">
-                    <template #trigger>
-                        <MarkdownToolbarButton
-                            :icon="List"
-                            title="Lists"
-                            :disabled="isToolbarLocked"
-                        />
-                    </template>
-                    <div class="flex flex-col">
-                        <MarkdownToolbarSubButton
-                            :icon="List"
-                            title="List"
-                            @click="toggleBulletList"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="ListOrdered"
-                            title="Ordered list"
-                            @click="toggleOrderedList"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="ListTodo"
-                            title="Task list"
-                            @click="toggleTaskList"
-                        />
-                    </div>
-                    <div class="flex flex-col">
-                        <MarkdownToolbarSubButton
-                            :icon="Indent"
-                            title="Indent"
-                            @click="indentList"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="Outdent"
-                            title="Outdent"
-                            @click="outdentList"
-                        />
-                    </div>
-                </Menu>
-                <Menu :disabled="isToolbarLocked">
-                    <template #trigger>
-                        <MarkdownToolbarButton
-                            :icon="DocumentPlus"
-                            title="Insert"
-                            :disabled="isToolbarLocked"
-                        />
-                    </template>
-                    <div class="flex flex-col">
-                        <MarkdownToolbarSubButton
-                            :icon="Link"
-                            title="Link"
-                            @click="openSearchFileModal"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="Image"
-                            title="Image"
-                            @click="openSearchImageModal"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="HorizontalRule"
-                            title="Horizontal rule"
-                            @click="setHorizontalRule"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="Template"
-                            title="Template"
-                            @click="openTemplateListModal"
-                        />
-                    </div>
-                </Menu>
-                <Menu :disabled="isToolbarLocked">
-                    <template #trigger>
-                        <MarkdownToolbarButton
-                            title="Tables"
-                            :icon="TableAdd"
-                            :disabled="isToolbarLocked"
-                        />
-                    </template>
-                    <div class="flex flex-col">
-                        <MarkdownToolbarSubButton
-                            :icon="TableAdd"
-                            title="Insert table"
-                            @click="insertTable"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="TableDelete"
-                            title="Delete table"
-                            @click="deleteTable"
-                        />
-                    </div>
-                    <MarkdownToolbarItemDivider />
-                    <div class="flex flex-col">
-                        <MarkdownToolbarSubButton
-                            :icon="TableAddColumn"
-                            :icon-rotate="true"
-                            title="Add column before"
-                            @click="addColumnBefore"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="TableAddColumn"
-                            title="Add column after"
-                            @click="addColumnAfter"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="TableDeleteColumn"
-                            title="Delete column"
-                            @click="deleteColumn"
-                        />
-                    </div>
-                    <div class="flex flex-col">
-                        <MarkdownToolbarSubButton
-                            :icon="TableAddRow"
-                            :icon-rotate="true"
-                            title="Add row before"
-                            @click="addRowBefore"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="TableAddRow"
-                            title="Add row after"
-                            @click="addRowAfter"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="TableDeleteRow"
-                            title="Delete row"
-                            @click="deleteRow"
-                        />
-                    </div>
-                    <MarkdownToolbarItemDivider />
-                    <div class="flex flex-col">
-                        <MarkdownToolbarSubButton
-                            :icon="AlignLeft"
-                            title="Align left"
-                            @click="setTableColumnAlignment('left')"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="AlignCenter"
-                            title="Align center"
-                            @click="setTableColumnAlignment('center')"
-                        />
-                        <MarkdownToolbarSubButton
-                            :icon="AlignRight"
-                            title="Align right"
-                            @click="setTableColumnAlignment('right')"
-                        />
-                    </div>
-                </Menu>
-            </div>
-        </div>
-        <div class="flex shrink-0 gap-0.5 border-l pl-1">
-            <MarkdownToolbarButton
-                :title="isEditMode ? 'Read document' : 'Edit document'"
-                :icon="isEditMode ? Eye : PenLine"
-                :active="!isEditMode"
-                @click="toggleEditMode"
-            />
-            <Menu>
+    <Teleport defer to="#file-actions">
+        <MarkdownToolbarButton
+            :title="isEditMode ? 'Read document' : 'Edit document'"
+            :icon="isEditMode ? Eye : PenLine"
+            :active="!isEditMode"
+            @click="toggleEditMode"
+        />
+        <MarkdownToolbarButton
+            v-if="isSmallScreen"
+            :title="expanded ? 'Close formatting' : 'Show formatting'"
+            :icon="expanded ? Check : Type"
+            :active="expanded"
+            :aria-expanded="expanded"
+            aria-controls="file-tools"
+            @click="emit('toggle')"
+        />
+    </Teleport>
+    <div v-if="!isSmallScreen || expanded" class="text-muted-foreground min-w-0 max-w-full" role="group" aria-label="Document formatting">
+        <div class="border-border/50 bg-muted/25 flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <MarkdownToolbarButton title="Bold" :icon="Bold" :active="marks.bold" :disabled="isToolbarLocked" @click="toggleBold" />
+            <MarkdownToolbarButton title="Italic" :icon="Italic" :active="marks.italic" :disabled="isToolbarLocked" @click="toggleItalic" />
+            <span class="bg-border/70 mx-1 h-4 w-px shrink-0" aria-hidden="true"></span>
+            <Menu v-for="group in groups.filter(group => ['Heading', 'Lists', 'Insert', 'Tables'].includes(group.title))" :key="group.title" :disabled="isToolbarLocked">
                 <template #trigger>
-                    <MarkdownToolbarButton title="More editor options" :icon="Ellipsis" />
+                    <MarkdownToolbarButton :title="group.title" :icon="group.icon" :disabled="isToolbarLocked" />
                 </template>
-                <MarkdownToolbarSubButton
-                    :title="isEditingMarkdown ? 'Rich text editor' : 'Markdown source'"
-                    :icon="Markdown"
-                    @click="toggleEditingMarkdown"
-                />
-                <MarkdownToolbarSubButton title="Print" :icon="Print" @click="print" />
+                <template v-for="(item, index) in group.items" :key="index">
+                    <MarkdownToolbarSubButton v-if="item" :title="item.title" :icon="item.icon" :icon-rotate="item.rotate" @click="item.run" />
+                    <MarkdownToolbarItemDivider v-else />
+                </template>
             </Menu>
+            <span class="bg-border/70 mx-1 h-4 w-px shrink-0" aria-hidden="true"></span>
+            <MarkdownToolbarButton title="Undo" :icon="Undo" :disabled="isToolbarLocked" @click="undo" />
+            <MarkdownToolbarButton title="Redo" :icon="Redo" :disabled="isToolbarLocked" @click="redo" />
+            <Teleport defer to="#file-actions" :disabled="isSmallScreen">
+                <Menu v-model:open="moreOpen">
+                    <template #trigger>
+                        <MarkdownToolbarButton title="More editor options" :icon="Ellipsis" />
+                    </template>
+                    <div ref="moreContent">
+                        <template v-if="selectedGroup">
+                            <DropdownMenuItem aria-label="Back to editor options" class="min-h-11 font-medium sm:min-h-8" @select="selectGroup(null, $event)">
+                                <ArrowLeft aria-hidden="true" />
+                                {{ selectedGroup.title }}
+                            </DropdownMenuItem>
+                            <MarkdownToolbarItemDivider />
+                            <template v-for="(item, index) in selectedGroup.items" :key="index">
+                                <MarkdownToolbarSubButton v-if="item" :title="item.title" :icon="item.icon" :icon-rotate="item.rotate" :disabled="isToolbarLocked" @click="item.run" />
+                                <MarkdownToolbarItemDivider v-else />
+                            </template>
+                        </template>
+                        <template v-else>
+                            <DropdownMenuItem
+                                v-for="group in groups.filter(group => ['Block styles', 'Text styles'].includes(group.title))"
+                                :key="group.title"
+                                :disabled="isToolbarLocked"
+                                class="min-h-11 sm:min-h-8"
+                                @select="selectGroup(group, $event)"
+                            >
+                                <component :is="group.icon" class="size-4 shrink-0" aria-hidden="true" />
+                                <span>{{ group.title }}</span>
+                                <ChevronRight class="ml-auto size-4" aria-hidden="true" />
+                            </DropdownMenuItem>
+                            <MarkdownToolbarItemDivider />
+                            <MarkdownToolbarSubButton
+                                :title="isEditingMarkdown ? 'Rich text editor' : 'Markdown source'"
+                                :icon="Markdown"
+                                @click="toggleEditingMarkdown"
+                            />
+                            <MarkdownToolbarSubButton v-if="layoutStore.showToggleContentWidthButton" title="Toggle content width" :icon="Maximize" @click="layoutStore.toggleContentWidth" />
+                            <MarkdownToolbarSubButton title="Print" :icon="Print" @click="print" />
+                            <MarkdownToolbarItemDivider />
+                            <MarkdownToolbarSubButton title="Close file" :icon="X" @click="vaultActions.closeFile" />
+                            <MarkdownToolbarSubButton title="Docs home" :icon="Home" @click="router.visit('/vaults')" />
+                        </template>
+                    </div>
+                </Menu>
+            </Teleport>
         </div>
     </div>
 </template>

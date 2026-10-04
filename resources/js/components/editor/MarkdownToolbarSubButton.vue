@@ -7,7 +7,7 @@ const emit = defineEmits<{ click: [event: Event] }>();
 </script>
 
 <template>
-    <DropdownMenuItem class="min-h-10 sm:min-h-8" @select="emit('click', $event)">
+    <DropdownMenuItem class="min-h-11 sm:min-h-8" @select="emit('click', $event)">
         <component :is="icon" :class="iconRotate ? 'rotate-180' : ''" aria-hidden="true" />
         <span>{{ title }}</span>
     </DropdownMenuItem>

@@ -1,3 +1,4 @@
+import { options } from './editor.mjs';
 import assert from 'node:assert/strict';
 
 export async function html(page, dir) {
@@ -11,7 +12,7 @@ export async function html(page, dir) {
                 response.request().method() === 'PATCH' && response.url().includes('/nodes/')
         );
     async function mode(name) {
-        await page.getByRole('button', { name: 'More editor options', exact: true }).click();
+        await options(page);
         await page.getByRole('menuitem', { name, exact: true }).click();
     }
     async function setSource(value) {

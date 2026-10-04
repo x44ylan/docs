@@ -9,7 +9,7 @@ defineProps<{ icon: Component; title: string; active?: boolean }>();
     <Button
         variant="ghost"
         size="icon"
-        class="size-10 shrink-0 sm:size-9"
+        class="size-9 shrink-0"
         :title="title"
         :aria-label="title"
         :aria-pressed="active"

@@ -1,3 +1,4 @@
+import { options, format } from './editor.mjs';
 import { chromium } from 'playwright';
 import { execFileSync } from 'node:child_process';
 import { generateKeyPairSync, randomBytes, sign } from 'node:crypto';
@@ -16,6 +17,7 @@ import { publicLinks } from './public.mjs';
 import { mcp } from './mcp.mjs';
 import { ui } from './ui.mjs';
 import { preview } from './preview.mjs';
+import { header } from './header.mjs';
 
 const image = process.argv[2] ?? 'docs:review';
 const baseline = process.argv.includes('--baseline');
@@ -25,10 +27,11 @@ const onlyNavigation = process.argv.includes('--navigation');
 const onlyMcp = process.argv.includes('--mcp');
 const iconsOnly = process.argv.includes('--icons-only');
 const onlyUi = process.argv.includes('--ui');
+const onlyHeader = process.argv.includes('--header');
 const withPreview = onlyUi && process.argv.includes('--preview');
 const dir = new URL('../../artifacts/e2e/', import.meta.url);
 await mkdir(dir, { recursive: true });
-const report = new URL(`${onlyUi ? 'ui' : onlyMcp ? 'mcp' : onlyPublic ? 'public' : onlySharing ? 'sharing' : onlyNavigation ? 'navigation' : baseline ? 'before' : 'report'}.json`, dir);
+const report = new URL(`${onlyHeader ? 'header' : onlyUi ? 'ui' : onlyMcp ? 'mcp' : onlyPublic ? 'public' : onlySharing ? 'sharing' : onlyNavigation ? 'navigation' : baseline ? 'before' : 'report'}.json`, dir);
 const started = new Date().toISOString();
 await writeFile(report, JSON.stringify({ image, started, status: 'running' }, null, 2));
 const docker = (...args) =>
@@ -69,6 +72,7 @@ async function checkHeader(count) {
             const bar = el.getBoundingClientRect();
             return [...el.querySelectorAll('button, a')].every((control) => {
                 const box = control.getBoundingClientRect();
+                if (!box.width || !box.height) return true;
                 return (
                     box.width === 36 &&
                     box.height === 36 &&
@@ -78,9 +82,10 @@ async function checkHeader(count) {
         }),
         'All header controls must be 36px and vertically centered'
     );
-    assert.equal(await header.getByRole('link', { name: 'Docs home' }).count(), 1);
-    assert.equal(await header.getByRole('button').count(), count);
-    assert(
+    const compactEditor = count === 3 && page.viewportSize().width < 640;
+    assert.equal(await header.getByRole('link', { name: 'Docs home' }).isVisible(), !compactEditor);
+    assert.equal(await header.getByRole('button').count(), count === 3 ? (page.viewportSize().width >= 1024 ? 13 : 5) : count);
+    if (!compactEditor) assert(
         await header
             .getByRole('link', { name: 'Docs home' })
             .evaluate((el) => el.getBoundingClientRect().left < innerWidth / 2)
@@ -175,7 +180,9 @@ try {
         })
     );
     browser = await chromium.launch(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {});
-    if (onlyUi) {
+    if (onlyHeader) {
+        checks.push(await header({ browser, base, jwt, dir, baseline }));
+    } else if (onlyUi) {
         const result = await ui({ browser, base, jwt, dir });
         checks.push(result.message);
         previewPath = result.path;
@@ -503,30 +510,20 @@ try {
                 return box && (small ? box.right <= 1 : box.width >= 240 && box.left === 0);
             }, width < 1024);
             await checkHeader(3);
-            assert.equal(
-                await page.getByRole('button', { name: 'Close file', exact: true }).count(),
-                width < 640 ? 0 : 1,
-                'No redundant close button on phones'
-            );
+            assert.equal(await page.getByRole('button', { name: 'Close file', exact: true }).count(), 0, 'Close file is in More, not a redundant header icon');
             const title = page.getByRole('textbox', { name: 'Document title', exact: true });
             assert.equal(await title.count(), 1, 'Only one editable document title');
             assert.equal(
                 await title.evaluate((el) => Boolean(el.closest('#app-header'))),
-                width < 640,
-                'Phone title belongs in the top bar; desktop title stays above the editor'
+                true,
+                'Title belongs in the shared header at every width'
             );
             assert(
                 await title.evaluate((el) => el.getBoundingClientRect().width >= 100),
                 'Title has usable space even at 320px'
             );
-            if (width < 640) {
-                assert(
-                    await page
-                        .getByRole('button', { name: 'Heading', exact: true })
-                        .evaluate((el) => el.getBoundingClientRect().top < 100),
-                    'No duplicate title row below the mobile header'
-                );
-            }
+            if (width >= 1024) assert(await page.getByRole('group', { name: 'Document formatting' }).evaluate(el => Boolean(el.closest('#app-header'))), 'No secondary formatting row');
+            else assert(await page.getByRole('button', { name: 'Show formatting', exact: true }).isVisible());
             const searchButton = page.getByRole('button', {
                 name: 'Search documents',
                 exact: true
@@ -593,7 +590,8 @@ try {
         assert.equal((await titleRestored).status(), 200);
         await page.waitForFunction(() => document.title === 'Getting started');
         await page.setViewportSize({ width: 1440, height: 900 });
-        await page.getByRole('button', { name: 'Close file', exact: true }).click();
+        await options(page);
+        await page.getByRole('menuitem', { name: 'Close file', exact: true }).click();
         await page.getByText('Select a note', { exact: true }).waitFor();
         await page.waitForFunction(() => document.title === 'Product');
         assert.equal(await page.getByRole('textbox', { name: 'Document title' }).count(), 0);
@@ -604,7 +602,7 @@ try {
         assert.equal(await documentTitle.inputValue(), 'Getting started');
         await page.waitForFunction(() => document.title === 'Getting started');
         checks.push(
-            'Mobile title uses the navbar without a close button; rename persists and desktop close/reopen works'
+            'One header contains the editable title/formatting at every size; rename persists and More close/reopen works'
         );
         await page.getByRole('button', { name: 'Search documents', exact: true }).focus();
         await page.keyboard.press('Enter');
@@ -697,8 +695,8 @@ try {
             'Left home/tree/search controls restored; right sidebar and toggle removed without a layout gap'
         );
         await editor.click();
-        await page.getByRole('button', { name: 'Heading', exact: true }).tap();
-        const headingMenu = page.getByRole('menu');
+        await format(page, 'Heading');
+        const headingMenu = page.getByRole('menu').last();
         await headingMenu.waitFor();
         assert(
             await headingMenu.evaluate((el) => {
@@ -721,18 +719,16 @@ try {
         await page.keyboard.press('Enter');
         await page.getByRole('menuitem', { name: 'Ordered list', exact: true }).waitFor();
         await page.keyboard.press('Escape');
-        await page.waitForFunction(
-            () => document.activeElement?.getAttribute('aria-label') === 'Lists'
-        );
+        await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Lists');
         await page.getByRole('button', { name: 'Read document', exact: true }).click();
         await page.locator('.tiptap[contenteditable="false"]').waitFor();
         assert(await page.getByRole('button', { name: 'Heading', exact: true }).isDisabled());
         await page.getByRole('button', { name: 'Edit document', exact: true }).click();
         await editor.waitFor();
-        await page.getByRole('button', { name: 'More editor options', exact: true }).click();
+        await options(page);
         await page.getByRole('menuitem', { name: 'Markdown source', exact: true }).click();
         await page.getByRole('textbox', { name: 'Markdown source', exact: true }).waitFor();
-        await page.getByRole('button', { name: 'More editor options', exact: true }).click();
+        await options(page);
         await page.getByRole('menuitem', { name: 'Rich text editor', exact: true }).click();
         await editor.waitFor();
         checks.push(
@@ -862,7 +858,8 @@ try {
         checks.push(
             'Preserved sidebar opens sharing; nested dialogs, keyboard tabs, collaborator creation and profile updates work'
         );
-        await page.getByRole('link', { name: 'Docs home', exact: true }).tap();
+        await options(page);
+        await page.getByRole('menuitem', { name: 'Docs home', exact: true }).click();
         await page.getByRole('heading', { name: 'Workspace' }).waitFor();
         await page.waitForFunction(() => document.title === 'Docs');
         checks.push('Browser tab titles follow home, active document, rename, reload and close/reopen without a brand suffix');

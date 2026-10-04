@@ -74,6 +74,9 @@ useContentWidthPreference(mainSectionRef);
 syncPanelsWithScreen(isSmallScreen.value);
 
 const openedFile = ref(props.openedFile ?? null);
+const showFormatting = ref(false);
+watch(isSmallScreen, () => { showFormatting.value = false; });
+watch(() => openedFile.value?.file.id, () => { showFormatting.value = false; });
 const documentPath = computed(() => {
     const parts = [
         vaultStore.name || props.vault.name,
@@ -258,27 +261,29 @@ useEcho<{ data: { user_id: number } }>(
     <Head :title="openedFile?.file.name || vaultStore.name || vault.name || 'Docs'" />
 
     <Teleport defer to="#app-header">
-        <div class="flex shrink-0 items-center gap-1">
-            <Link href="/vaults" aria-label="Docs home" title="Docs" class="inline-flex size-9 items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-ring">
-                <Doc class="size-4.5" />
-            </Link>
-            <button
-                class="hover:bg-accent hover:text-accent-foreground inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors"
-                type="button"
-                aria-label="Toggle document tree"
-                :aria-expanded="isLeftPanelOpen"
-                @click="toggleLeftPanel(isSmallScreen)"
-            >
-                <Bars3BottomLeft class="size-4" />
-            </button>
+        <div class="flex min-w-0 items-center gap-1 sm:gap-3" :class="isSmallScreen && showFormatting ? 'shrink-0' : 'flex-1'">
+            <div class="flex shrink-0 items-center gap-1">
+                <Link v-show="!isSmallScreen || !showFormatting" href="/vaults" aria-label="Docs home" title="Docs" class="hidden size-9 items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:inline-flex">
+                    <Doc class="size-4.5" />
+                </Link>
+                <button
+                    class="hover:bg-accent hover:text-accent-foreground inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors"
+                    type="button"
+                    aria-label="Toggle document tree"
+                    :aria-expanded="isLeftPanelOpen"
+                    @click="showFormatting = false; toggleLeftPanel(isSmallScreen)"
+                >
+                    <Bars3BottomLeft class="size-4" />
+                </button>
+            </div>
+            <div v-show="!isSmallScreen || !showFormatting" id="file-header" class="flex min-w-0 flex-1 items-center" aria-label="Document path" :title="documentPath.join(' / ')">
+                <span v-if="!openedFile" class="text-foreground truncate text-sm font-medium">{{ vaultStore.name || vault.name }}</span>
+            </div>
         </div>
-        <div id="file-header" class="flex min-w-0 flex-1 items-center sm:hidden"></div>
-        <div class="text-muted-foreground hidden min-w-0 flex-1 items-center gap-1.5 text-xs sm:flex" aria-label="Document path" :title="documentPath.join(' / ')">
-            <span v-if="documentPath.length > 1" class="min-w-0 truncate">{{ documentPath.slice(0, -1).join(' / ') }}</span>
-            <span v-if="documentPath.length > 1" aria-hidden="true" class="text-muted-foreground/60">/</span>
-            <span class="text-foreground min-w-0 truncate font-medium">{{ documentPath.at(-1) }}</span>
-        </div>
-        <div class="flex shrink-0 items-center gap-1">
+        <div id="file-tools" class="flex min-w-0 items-center" :class="isSmallScreen && showFormatting ? 'flex-1' : 'shrink-0'" :inert="layoutStore.isFileLoading"></div>
+        <div class="flex shrink-0 items-center gap-1 lg:min-w-0 lg:flex-1 lg:justify-end">
+            <div id="file-actions" class="flex shrink-0 items-center" :inert="layoutStore.isFileLoading"></div>
+            <div v-show="!isSmallScreen || !showFormatting" class="flex shrink-0 items-center gap-1" :class="openedFile ? 'lg:ml-2 lg:border-l lg:pl-2' : ''">
             <button
                 class="hover:bg-accent hover:text-accent-foreground inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors"
                 type="button"
@@ -294,6 +299,7 @@ useEcho<{ data: { user_id: number } }>(
                 <MagnifyingGlass class="size-4" />
             </button>
             <UserMenu />
+            </div>
         </div>
     </Teleport>
 
@@ -344,7 +350,7 @@ useEcho<{ data: { user_id: number } }>(
                 @name-updated="router.replaceProp('openedFile.file.name', $event)"
             >
                 <template v-if="openedFile.file.type === 'note'" #toolbar>
-                    <MarkdownToolbar :vault-id="props.vault.id" :node-id="openedFile.file.id" />
+                    <MarkdownToolbar :vault-id="props.vault.id" :node-id="openedFile.file.id" :expanded="showFormatting" @toggle="showFormatting = !showFormatting" />
                 </template>
                 <component
                     :is="fileComponents[openedFile.file.type]"

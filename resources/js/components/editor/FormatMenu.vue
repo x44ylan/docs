@@ -4,10 +4,9 @@ import {
     DropdownMenuContent,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ref } from 'vue';
 
 defineProps<{ disabled?: boolean }>();
-const open = ref(false);
+const open = defineModel<boolean>('open', { default: false });
 const closeMenu = () => {
     open.value = false;
 };

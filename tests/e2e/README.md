@@ -2,6 +2,20 @@
 
 ## Failure cases to cover before changing the implementation
 
+- Compact formatting must open in the existing header, scroll without moving the
+  page, preserve text selection, and return to the title/search/account controls.
+  Check long titles, opening the tree, changing notes, read/source modes and
+  resizing while tools are open. Desktop editing tools stay separate from view
+  and account actions; direct Bold/Italic controls reflect the selection.
+
+- One 60px header must contain navigation, editable title and editor controls,
+  with no secondary title/toolbar row. Check 320/390/639/640/768/1023/1024/1440px
+  in both themes; the title stays at least 100px wide with a 16px font on phones
+  to avoid Safari input zoom. Formatting is centred on desktop and opens as a
+  swipeable strip on phones. Extra styles use the More panel. Preserve selection,
+  keyboard focus, source/read locks, every command, rename/autosave/reload,
+  SPA/history, search/account/home/tree, empty-vault and attachment behavior.
+
 - Reference-inspired editor polish must preserve the existing editor, nested-note
   navigation and autosave. Keep search only in the top-right header, with no sidebar
   search button or empty search row. The new-note shortcut belongs beside the vault
@@ -199,6 +213,10 @@ SPA navigation. Its report is `artifacts/e2e/navigation.json`; landing screensho
 use the `vault-main-` prefix.
 Run `node tests/e2e/run.mjs docs:ui --ui` for visual polish checks and screenshots
 at 320/390/1440px in both themes. Its report is `artifacts/e2e/ui.json`.
+Run `node tests/e2e/run.mjs docs:header --header` for merged-header layout and
+editor checks. The repeatable report is `artifacts/e2e/header.json`; screenshots
+use the `header-` prefix. Add `--baseline` with the previous image to compare
+existing editor behavior before the structural change.
 Add `--preview` to expose the disposable sample workspace through a temporary
 Cloudflare Quick Tunnel for 50 minutes. The preview proxy blocks writes and unrelated
 routes; no production data, keys, volumes or tunnel configuration are used.
