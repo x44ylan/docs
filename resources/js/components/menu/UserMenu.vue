@@ -9,13 +9,11 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import CircleStack from '@/icons/CircleStack.vue';
 import Moon from '@/icons/Moon.vue';
 import Sun from '@/icons/Sun.vue';
 import User from '@/icons/User.vue';
 import ArrowUpTray from '@/icons/ArrowUpTray.vue';
 import { logout } from '@/routes/index';
-import { index } from '@/routes/vaults';
 import { useUserStore } from '@/stores/user';
 import { Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -47,16 +45,9 @@ const email = computed(() => userStore.email ?? '');
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem @click="openModal(ProfileEditModal, { title: 'Profile' })">
+            <DropdownMenuItem @click="openModal(ProfileEditModal, { title: 'Rename' })">
                 <User />
-                Profile
-            </DropdownMenuItem>
-
-            <DropdownMenuItem :as-child="true">
-                <Link :href="index.url()">
-                    <CircleStack />
-                    Vaults
-                </Link>
+                Rename
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />

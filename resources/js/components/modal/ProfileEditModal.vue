@@ -21,7 +21,7 @@ const handleSubmit = () => {
     form.patch(update.url(), {
         onSuccess: (response: { user: User }) => {
             closeModal();
-            createToast('Profile updated', 'success');
+            createToast('Name updated', 'success');
             userStore.setUser(response.user);
         },
     });

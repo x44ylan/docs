@@ -179,8 +179,13 @@ export async function header({ browser, base, jwt, dir, baseline }) {
         await page.getByRole('dialog', { name: 'Search', exact: true }).waitFor();
         await page.keyboard.press('Escape');
         await page.getByRole('button', { name: 'User menu', exact: true }).click();
-        await page.getByRole('menuitem', { name: 'Vaults', exact: true }).waitFor();
-        await page.keyboard.press('Escape');
+        await page.getByRole('menuitem', { name: 'Rename', exact: true }).waitFor();
+        assert.equal(await page.getByRole('menuitem', { name: /^(Vaults|Profile)$/ }).count(), 0);
+        await page.getByRole('menuitem', { name: 'Logout', exact: true }).waitFor();
+        await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+        const rename = page.getByRole('dialog', { name: 'Rename', exact: true });
+        await rename.getByRole('textbox', { name: 'Display name' }).waitFor();
+        await rename.getByRole('button', { name: 'Cancel', exact: true }).click();
         if (!baseline) {
             for (const width of [320, 390]) {
                 await page.setViewportSize({ width, height: 844 });

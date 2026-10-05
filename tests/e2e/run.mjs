@@ -838,7 +838,8 @@ try {
         });
         await sharing.getByRole('button', { name: 'Close', exact: true }).click();
         await page.getByRole('button', { name: 'User menu' }).click();
-        await page.getByRole('menuitem', { name: 'Profile', exact: true }).waitFor();
+        await page.getByRole('menuitem', { name: 'Rename', exact: true }).waitFor();
+        assert.equal(await page.getByRole('menuitem', { name: /^(Vaults|Profile)$/ }).count(), 0);
         assert.equal(
             await page
                 .getByRole('menuitem', {
@@ -851,10 +852,11 @@ try {
             path: new URL('account-mobile.png', dir).pathname,
             animations: 'disabled'
         });
-        await page.getByRole('menuitem', { name: 'Profile', exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+        await page.getByRole('dialog', { name: 'Rename', exact: true }).waitFor();
         await page.getByRole('textbox', { name: 'Display name' }).fill('Alex Updated');
         await page.getByRole('button', { name: 'Save', exact: true }).click();
-        await page.getByText('Profile updated', { exact: true }).waitFor();
+        await page.getByText('Name updated', { exact: true }).waitFor();
         checks.push(
             'Preserved sidebar opens sharing; nested dialogs, keyboard tabs, collaborator creation and profile updates work'
         );
