@@ -40,7 +40,11 @@ export async function header({ browser, base, jwt, dir, baseline }) {
                 if (!baseline) {
                     assert(await title.evaluate(el => !!el.closest('#app-header')), 'Title belongs to the shared header');
                     if (width >= 1024) assert(await page.getByRole('group', { name: 'Document formatting' }).evaluate(el => !!el.closest('#app-header')), 'Formatting belongs to the shared header');
-                    else assert(await page.getByRole('button', { name: 'Show formatting', exact: true }).isVisible());
+                    else {
+                        const formatting = page.getByRole('button', { name: 'Show formatting', exact: true });
+                        assert(await formatting.isVisible());
+                        assert.equal(await formatting.locator('svg.lucide-text-initial').count(), 1);
+                    }
                     assert((await title.boundingBox()).width >= 100, `${width}px title is too narrow`);
                     assert(await page.locator('#app-header').evaluate(el => {
                         const boxes = [...el.querySelectorAll('button, a, input')].map(control => control.getBoundingClientRect()).filter(box => box.width && box.height);

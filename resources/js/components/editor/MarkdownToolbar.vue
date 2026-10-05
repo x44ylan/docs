@@ -33,7 +33,7 @@ import ListOrdered from '@/icons/ListOrdered.vue';
 import ListTodo from '@/icons/ListTodo.vue';
 import Markdown from '@/icons/Markdown.vue';
 import Outdent from '@/icons/Outdent.vue';
-import { Eye, PenLine, Ellipsis, ChevronRight, ArrowLeft, Home, Maximize, X, Check, Type } from 'lucide-vue-next';
+import { Eye, PenLine, Ellipsis, ChevronRight, ArrowLeft, Home, Maximize, X, Check, TextInitial } from 'lucide-vue-next';
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { router } from '@inertiajs/vue3';
 import Pilcrow from '@/icons/Pilcrow.vue';
@@ -380,7 +380,7 @@ const groups: ToolGroup[] = [
         <MarkdownToolbarButton
             v-if="isSmallScreen && isEditMode"
             :title="expanded ? 'Close formatting' : 'Show formatting'"
-            :icon="expanded ? Check : Type"
+            :icon="expanded ? Check : TextInitial"
             :active="expanded"
             :aria-expanded="expanded"
             aria-controls="file-tools"
