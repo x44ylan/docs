@@ -2,6 +2,11 @@
 
 ## Failure cases to cover before changing the implementation
 
+- Nested-note parent paths must be visible above the title inside the same 60px
+  header, shorten to the nearest parent on phones, and truncate long names without
+  squeezing controls. Preserve the full path tooltip, rename/SPA updates, and hide
+  redundant paths on the vault's main note and while compact formatting is open.
+
 - Compact formatting must open in the existing header, scroll without moving the
   page, preserve text selection, and return to the title/search/account controls.
   Check long titles, opening the tree, changing notes, read/source modes and

@@ -86,6 +86,7 @@ const documentPath = computed(() => {
     return parts.length > 1 && parts[0].toLowerCase() === parts[1].toLowerCase()
         ? parts.slice(1) : parts;
 });
+const parentPath = computed(() => documentPath.value.slice(0, -1));
 const fileComponents = {
     note: VaultFileNote,
     image: VaultFileImage,
@@ -276,7 +277,10 @@ useEcho<{ data: { user_id: number } }>(
                     <Bars3BottomLeft class="size-4" />
                 </button>
             </div>
-            <div v-show="!isSmallScreen || !showFormatting" id="file-header" class="flex min-w-0 flex-1 items-center" aria-label="Document path" :title="documentPath.join(' / ')">
+            <div v-show="!isSmallScreen || !showFormatting" id="file-header" class="flex min-w-0 flex-1 flex-col justify-center" aria-label="Document path" :title="documentPath.join(' / ')">
+                <span v-if="openedFile && parentPath.length" class="text-muted-foreground w-full truncate text-[11px] leading-4" aria-label="Parent path">
+                    {{ isSmallScreen ? `${parentPath.length > 1 ? '… / ' : ''}${parentPath.at(-1)}` : parentPath.join(' / ') }}
+                </span>
                 <span v-if="!openedFile" class="text-foreground truncate text-sm font-medium">{{ vaultStore.name || vault.name }}</span>
             </div>
         </div>

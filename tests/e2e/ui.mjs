@@ -34,8 +34,45 @@ export async function ui({ browser, base, jwt, dir }) {
         await title.fill('System design');
         assert.equal((await saved).status(), 200);
         await page.waitForFunction(() => document.querySelector('[aria-label="Document path"]')?.getAttribute('title').includes('System design'));
+        const parents = page.getByLabel('Parent path', { exact: true });
+        for (const width of [320, 390, 1024, 1440]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.waitForFunction(small => document.querySelector('[aria-label="Parent path"]')?.textContent.trim() === (small ? '… / Getting started' : 'Design notes / Getting started'), width < 1024);
+            for (const theme of ['light', 'dark']) {
+                await page.evaluate(theme => document.documentElement.classList.toggle('dark', theme === 'dark'), theme);
+                assert(await parents.isVisible());
+                assert.equal(await title.inputValue(), 'System design');
+                const parentBox = await parents.boundingBox();
+                const titleBox = await title.boundingBox();
+                assert(parentBox.y >= 0 && parentBox.y + parentBox.height <= titleBox.y, 'Parent path sits above title');
+                assert(titleBox.width >= 100 && titleBox.y + titleBox.height <= 60, 'Title remains usable inside header');
+                assert.equal(await page.locator('#app-header').evaluate(el => el.parentElement.getBoundingClientRect().height), 60);
+                assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+                await page.screenshot({ path: new URL(`ui-path-${width}-${theme}.png`, dir).pathname, animations: 'disabled' });
+            }
+            if (width < 1024) {
+                await page.getByRole('button', { name: 'Show formatting', exact: true }).click();
+                assert.equal(await parents.isVisible(), false);
+                await page.getByRole('button', { name: 'Close formatting', exact: true }).click();
+                assert(await parents.isVisible());
+            }
+        }
+        const longParent = 'A long parent directory name that must never push the editor controls off screen';
+        await request(`${path}/nodes/${project.id}`, 'PATCH', { name: longParent });
+        await page.reload();
+        await parents.getByText(`Design notes / ${longParent}`, { exact: true }).waitFor();
+        await page.setViewportSize({ width: 320, height: 900 });
+        await page.waitForFunction(name => document.querySelector('[aria-label="Parent path"]')?.textContent.trim() === `… / ${name}`, longParent);
+        assert(await parents.evaluate(el => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow === 'ellipsis'), 'Long parents truncate');
+        assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        assert((await title.boundingBox()).width >= 100);
+        assert.match(await breadcrumb.getAttribute('title'), new RegExp(longParent));
+        await request(`${path}/nodes/${project.id}`, 'PATCH', { name: 'Getting started' });
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.waitForFunction(() => document.querySelector('[aria-label="Toggle document tree"]')?.getAttribute('aria-expanded') === 'true');
         await page.locator('aside').getByTitle('Design notes', { exact: true }).last().click();
         await page.locator('.tiptap').getByRole('heading', { name: 'A calmer place to think' }).waitFor();
+        assert.equal(await parents.count(), 0, 'Main note has no redundant parent path');
         for (const width of [320, 390, 1440]) {
             await page.setViewportSize({ width, height: 900 });
             await page.waitForFunction(small => document.querySelector('[aria-label="Toggle document tree"]')?.getAttribute('aria-expanded') === String(!small), width < 1024);
@@ -90,7 +127,7 @@ export async function ui({ browser, base, jwt, dir }) {
         await page.goto(`${base}${path}?file=${main.id}`);
         await page.locator('.tiptap').getByRole('heading', { name: 'A calmer place to think' }).waitFor();
         assert.deepEqual(errors, []);
-        return { message: 'UI screenshots at 320/390/1440px in both themes; no sidebar search row, header search/create, breadcrumb rename, fixed header, overflow, responsive typography, autosave and read/edit verified', path: `${path}?file=${main.id}` };
+        return { message: 'UI screenshots at 320/390/1440px and nested paths at 1024px in both themes; visible responsive parent paths, long-name truncation, breadcrumb rename/SPA, fixed header, formatting toggle, overflow, typography, autosave and read/edit verified', path: `${path}?file=${main.id}` };
     } catch (error) {
         await page.screenshot({ path: new URL('ui-failure.png', dir).pathname }).catch(() => {});
         throw error;
