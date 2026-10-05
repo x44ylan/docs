@@ -220,6 +220,9 @@ Run `node tests/e2e/run.mjs docs:review --sharing` for the public-sharing checks
 phone/desktop screenshots and a real disposable Reverb WebSocket test. This checks
 that a socket kept open after access is revoked receives no further private content.
 Its report is `artifacts/e2e/sharing.json`.
+Use `--sharing-backend` to run the existing access, mutation and real Reverb
+checks without the responsive layout loop; this writes the separate
+`artifacts/e2e/sharing-backend.json` report and leaves layout assertions unchanged.
 Run `node tests/e2e/run.mjs docs:review --public` for the anonymous public-reader
 checks. Private asset paths are deliberately blocked in the browser to emulate
 Cloudflare Access; the report is `artifacts/e2e/public.json` and screenshots use
@@ -239,6 +242,35 @@ routes; no production data, keys, volumes or tunnel configuration are used.
 Run `node tests/e2e/run.mjs docs:review --mcp` for MCP identity, move and browser
 tree regression checks. The report is `artifacts/e2e/mcp.json`; moved-note
 screenshots use the `mcp-` prefix. Tests use only disposable notes and identities.
+Run `node tests/e2e/run.mjs docs:review --storage` for owner-scoped vault naming,
+checked file writes, attachment imports, failed rename/backlink rollback, ZIP
+parent ordering, expanded-size limits, partial-import cleanup and failed
+node/vault deletion. Tests use
+reduced limits and inject filesystem/database failures only in their disposable
+container. The report is `artifacts/e2e/storage.json`; add `--baseline` with the
+previous image to preserve the failing report as `storage-before.json`.
+Run `node tests/e2e/run.mjs docs:review --storage-concurrency` for a failed
+rename racing a second HTTP save. The fixture uses multiple PHP workers and a
+pause hook only in the disposable container. Its repeatable report is
+`artifacts/e2e/storage-concurrency.json`; `--baseline` writes the separate
+`storage-concurrency-before.json` report.
+Set `BROWSER_EXECUTABLE` to an existing Chromium executable when the Playwright
+bundled version is unavailable.
+
+ZIP import defaults allow 64 MiB per entry, 256 MiB expanded total, 5,000
+entries/documents/folders, depth 64, and 1 MiB metadata. Configure these with
+`DOCS_IMPORT_MAX_ENTRY_BYTES`, `DOCS_IMPORT_MAX_TOTAL_BYTES`,
+`DOCS_IMPORT_MAX_ENTRIES`, `DOCS_IMPORT_MAX_DEPTH`, and
+`DOCS_IMPORT_MAX_METADATA_BYTES`. Limits include unsupported entries; compressed
+upload limits still apply separately. Invalid/over-limit archives create no vault.
+Database transactions and filesystem compensation preserve existing records and
+bytes when an operation throws. Deletion first moves data into a hidden local
+quarantine and removes it after commit. Cleanup/broadcast/index failures after
+commit are logged; they do not roll back committed data. Cleanup failures can
+leave hidden temporary/quarantine files requiring operator recovery. This is not
+a durable journal or a crash-atomic transaction across the database and disk.
+Ordinary caught failures restore files before releasing database transaction
+locks; database deadlocks or process/host crashes can release locks earlier.
 Anonymous links require a separate Cloudflare Access application for
 `docs.x44ylan.com/share/*` with Bypass → Everyone; keep the main application
 authenticated. In Collaboration, create a Public link to publish a vault

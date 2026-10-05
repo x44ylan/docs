@@ -7,15 +7,13 @@ namespace App\Actions;
 use App\Models\Vault;
 use App\Models\VaultNode;
 use App\Services\VaultFiles\Types\Note;
-use Illuminate\Http\File;
-use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 
 final readonly class ProcessImportedFile
 {
     public function handle(Vault $vault, ?VaultNode $parent, string $fileName, string $filePath): VaultNode
     {
         $createVaultNode = app(CreateVaultNode::class);
-        $getPathFromVaultNode = app(GetPathFromVaultNode::class);
 
         $attributes = [
             'parent_id' => $parent?->id,
@@ -28,19 +26,11 @@ final readonly class ProcessImportedFile
 
         if (in_array($attributes['extension'], Note::extensions())) {
             $attributes['extension'] = 'md';
-            $attributes['content'] = (string) file_get_contents($filePath);
+            $content = file_get_contents($filePath);
+            if ($content === false) throw new RuntimeException('Could not read the imported document.');
+            $attributes['content'] = $content;
         }
 
-        $node = $createVaultNode->handle($vault, $attributes);
-
-        if ($node->extension !== 'md') {
-            $relativePath = $getPathFromVaultNode->handle($node);
-            $pathInfo = pathinfo($relativePath);
-            $savePath = $pathInfo['dirname'] ?? '';
-            $saveName = $pathInfo['basename'];
-            Storage::putFileAs($savePath, new File($filePath), $saveName);
-        }
-
-        return $node;
+        return $createVaultNode->handle($vault, $attributes, sourcePath: $attributes['extension'] === 'md' ? null : $filePath);
     }
 }

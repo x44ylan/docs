@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function sharing({ browser, base, jwt, dir, socketPort }) {
+export async function sharing({ browser, base, jwt, dir, socketPort, layout = true }) {
     const contexts = [];
     const sockets = [];
     const errors = [];
@@ -63,7 +63,7 @@ export async function sharing({ browser, base, jwt, dir, socketPort }) {
         assert.equal((await request(owner, access, 'PATCH', { is_public: 'everyone' })).status, 422);
         assert.equal((await request(owner, access, 'POST', { email: 'sharing-member@example.test' })).status, 200);
 
-        for (const [width, theme] of [[320, 'dark'], [390, 'light'], [1440, 'dark']]) {
+        for (const [width, theme] of (layout ? [[320, 'dark'], [390, 'light'], [1440, 'dark']] : [])) {
             await owner.setViewportSize({ width, height: 900 });
             await owner.evaluate(value => localStorage.setItem('theme', value), theme);
             await owner.goto(`${base}${path}`);
@@ -105,6 +105,11 @@ export async function sharing({ browser, base, jwt, dir, socketPort }) {
             await owner.screenshot({ path: new URL(`sharing-button-${width}.png`, dir).pathname });
         }
 
+        if (!layout) {
+            await owner.goto(`${base}${path}`);
+            const toggle = owner.getByRole('button', { name: 'Toggle document tree' });
+            if (await toggle.getAttribute('aria-expanded') === 'false') await toggle.click();
+        }
         await owner.getByRole('button', { name: 'Collaboration', exact: true }).click();
         const select = owner.getByRole('button', { name: 'Access', exact: true });
         await owner.route(`**${access}`, route => route.request().method() === 'PATCH' ? route.fulfill({ status: 500, json: { message: 'Unavailable' } }) : route.continue());
@@ -178,7 +183,9 @@ export async function sharing({ browser, base, jwt, dir, socketPort }) {
         assert.equal((await request(owner, path, 'DELETE')).status, 200);
         assert(!(await home(first)).visibleVaults.some(v => v.id === id));
         assert.deepEqual(errors, []);
-        return 'Shared themed access menu at 320/390/1440px with keyboard selection and focus recovery; direct collaboration button, public/restricted access persists across browser and MCP, anonymous access stays blocked, revocation excludes old sockets, explicit members survive and failed saves recover';
+        return layout
+            ? 'Shared themed access menu at 320/390/1440px with keyboard selection and focus recovery; direct collaboration button, public/restricted access persists across browser and MCP, anonymous access stays blocked, revocation excludes old sockets, explicit members survive and failed saves recover'
+            : 'Public/restricted access persists across browser and MCP; anonymous access stays blocked, committed note edits broadcast, revocation excludes old sockets, explicit members survive, failed saves recover and deletion works';
     } finally {
         for (const socket of sockets) socket.close();
         for (const context of contexts) await context.close();

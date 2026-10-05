@@ -7,6 +7,7 @@ namespace App\Actions;
 use App\Events\VaultListUpdatedEvent;
 use App\Models\User;
 use App\Models\Vault;
+use App\Services\VaultStorage;
 use Illuminate\Support\Facades\Storage;
 
 final readonly class CreateVault
@@ -14,36 +15,26 @@ final readonly class CreateVault
     /** @param array{name: string} $attributes */
     public function handle(User $user, array $attributes, bool $broadcast = true): Vault
     {
-        // Generate a new vault name if the current one already exists
-        $vaultExists = $user->vaults()
-            ->whereRaw('LOWER(name) = LOWER(?)', [$attributes['name']])
-            ->exists();
+        $storage = app(VaultStorage::class);
+        return $storage->run(function () use ($user, $attributes, $broadcast, $storage): Vault {
+            User::whereKey($user->id)->lockForUpdate()->firstOrFail();
+            $baseName = $attributes['name'];
+            $userPath = app(GetPathFromUser::class)->handle($user);
+            $suffix = 0;
+            while ($user->vaults()->whereRaw('LOWER(name) = LOWER(?)', [$attributes['name']])->exists()
+                || Storage::disk('local')->exists($userPath . $attributes['name'])) {
+                $ending = '-' . ++$suffix;
+                $attributes['name'] = mb_substr($baseName, 0, 255 - strlen($ending)) . $ending;
+            }
 
-        if ($vaultExists) {
-            /** @var list<string> $vaults */
-            $vaults = $user->vaults()
-                ->select('name')
-                ->whereRaw('LOWER(name) LIKE LOWER(?)', [$attributes['name'] . '-%'])
-                ->pluck('name')
-                ->toArray();
-            natcasesort($vaults);
-            $attributes['name'] .= count($vaults) && preg_match('/-(\d+)$/', end($vaults), $matches) === 1
-                ? '-' . ((int) $matches[1] + 1)
-                : '-1';
-        }
-
-        // Save vault to database
-        $vault = $user->vaults()->create($attributes);
-
-        // Save vault to disk
-        $vaultPath = app(GetPathFromVault::class)->handle($vault);
-        Storage::disk('local')->makeDirectory($vaultPath);
-
-        // Broadcast event
-        if ($broadcast) {
-            broadcast(new VaultListUpdatedEvent($user))->toOthers();
-        }
-
-        return $vault;
+            $vault = $user->vaults()->create($attributes);
+            $storage->createDirectory(app(GetPathFromVault::class)->handle($vault));
+            if ($broadcast) {
+                $storage->afterCommit(static function () use ($user): void {
+                    broadcast(new VaultListUpdatedEvent($user))->toOthers();
+                });
+            }
+            return $vault;
+        });
     }
 }

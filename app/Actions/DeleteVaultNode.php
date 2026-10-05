@@ -6,67 +6,50 @@ namespace App\Actions;
 
 use App\Events\VaultNodeDeletedEvent;
 use App\Events\VaultTemplateListUpdatedEvent;
+use App\Models\Vault;
 use App\Models\VaultNode;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
+use App\Services\VaultStorage;
 
 final readonly class DeleteVaultNode
 {
     /** @return array<int> */
     public function handle(VaultNode $node, bool $deleteFromDisk = true): array
     {
-        $wasInTemplatesFolder = $node->isInTemplatesFolder();
-        $path = app(GetPathFromVaultNode::class)->handle($node);
-        $hasChildren = $node->children()->exists();
-        $deletedNodeIds = DB::transaction(fn(): array => $this->deleteFromDatabase($node));
+        $storage = app(VaultStorage::class);
+        return $storage->run(function () use ($node, $deleteFromDisk, $storage): array {
+            $vault = Vault::whereKey($node->vault_id)->lockForUpdate()->firstOrFail();
+            $node->refresh();
+            $node->setRelation('vault', $vault);
+            $wasInTemplatesFolder = $node->isInTemplatesFolder();
+            $path = app(GetPathFromVaultNode::class)->handle($node);
+            $hasChildren = $node->children()->exists();
+            $deletedNodeIds = $this->deleteFromDatabase($node);
 
-        if ($deleteFromDisk) {
-            $this->deleteFromDisk($node, $path);
-            if ($node->is_file && $hasChildren) {
-                Storage::disk('local')->deleteDirectory(substr($path, 0, -strlen('.'.$node->extension)));
+            if ($deleteFromDisk) {
+                $storage->remove($path, !$node->is_file);
+                if ($node->is_file && $hasChildren) {
+                    $storage->remove(substr($path, 0, -strlen('.' . $node->extension)), true);
+                }
             }
-        }
-
-        // Broadcast events
-        broadcast(new VaultNodeDeletedEvent($node, $deletedNodeIds))->toOthers();
-
-        if ($wasInTemplatesFolder) {
-            broadcast(new VaultTemplateListUpdatedEvent($node->vault));
-        }
-
-        return $deletedNodeIds;
+            $storage->afterCommit(static function () use ($node, $deletedNodeIds, $wasInTemplatesFolder, $vault): void {
+                broadcast(new VaultNodeDeletedEvent($node, $deletedNodeIds))->toOthers();
+                if ($wasInTemplatesFolder) broadcast(new VaultTemplateListUpdatedEvent($vault));
+            });
+            return $deletedNodeIds;
+        });
     }
 
     /** @return array<int> */
     private function deleteFromDatabase(VaultNode $node): array
     {
         $deletedNodeIds = [$node->id];
-
         foreach ($node->children()->get() as $child) {
-            $deletedNodeIds = [
-                ...$deletedNodeIds,
-                ...$this->deleteFromDatabase($child),
-            ];
+            $deletedNodeIds = [...$deletedNodeIds, ...$this->deleteFromDatabase($child)];
         }
-
         $node->links()->detach();
         $node->backlinks()->detach();
         $node->tags()->detach();
         $node->delete();
-
         return $deletedNodeIds;
-    }
-
-    private function deleteFromDisk(VaultNode $node, string $nodePath): void
-    {
-        if (!Storage::disk('local')->exists($nodePath)) {
-            return;
-        }
-
-        if ($node->is_file) {
-            Storage::disk('local')->delete($nodePath);
-        } else {
-            Storage::disk('local')->deleteDirectory($nodePath);
-        }
     }
 }

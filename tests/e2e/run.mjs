@@ -18,20 +18,25 @@ import { mcp } from './mcp.mjs';
 import { ui } from './ui.mjs';
 import { preview } from './preview.mjs';
 import { header } from './header.mjs';
+import { storage } from './storage.mjs';
+import { storageConcurrency } from './storage-concurrency.mjs';
 
 const image = process.argv[2] ?? 'docs:review';
 const baseline = process.argv.includes('--baseline');
-const onlySharing = process.argv.includes('--sharing');
+const onlySharingBackend = process.argv.includes('--sharing-backend');
+const onlySharing = process.argv.includes('--sharing') || onlySharingBackend;
 const onlyPublic = process.argv.includes('--public');
 const onlyNavigation = process.argv.includes('--navigation');
 const onlyMcp = process.argv.includes('--mcp');
 const iconsOnly = process.argv.includes('--icons-only');
 const onlyUi = process.argv.includes('--ui');
 const onlyHeader = process.argv.includes('--header');
+const onlyStorage = process.argv.includes('--storage');
+const onlyStorageConcurrency = process.argv.includes('--storage-concurrency');
 const withPreview = onlyUi && process.argv.includes('--preview');
 const dir = new URL('../../artifacts/e2e/', import.meta.url);
 await mkdir(dir, { recursive: true });
-const report = new URL(`${onlyHeader ? 'header' : onlyUi ? 'ui' : onlyMcp ? 'mcp' : onlyPublic ? 'public' : onlySharing ? 'sharing' : onlyNavigation ? 'navigation' : baseline ? 'before' : 'report'}.json`, dir);
+const report = new URL(`${onlyStorageConcurrency ? (baseline ? 'storage-concurrency-before' : 'storage-concurrency') : onlyStorage ? (baseline ? 'storage-before' : 'storage') : onlyHeader ? 'header' : onlyUi ? 'ui' : onlyMcp ? 'mcp' : onlyPublic ? 'public' : onlySharing ? (onlySharingBackend ? 'sharing-backend' : 'sharing') : onlyNavigation ? 'navigation' : baseline ? 'before' : 'report'}.json`, dir);
 const started = new Date().toISOString();
 await writeFile(report, JSON.stringify({ image, started, status: 'running' }, null, 2));
 const docker = (...args) =>
@@ -136,6 +141,8 @@ try {
         'SESSION_SECURE_COOKIE=false',
         '-e',
         'SCOUT_DRIVER=null',
+        ...(onlyStorageConcurrency ? ['-e', 'PHP_CLI_SERVER_WORKERS=4'] : []),
+        ...(onlyStorage ? ['-e', 'DOCS_IMPORT_MAX_ENTRY_BYTES=4096', '-e', 'DOCS_IMPORT_MAX_TOTAL_BYTES=10000', '-e', 'DOCS_IMPORT_MAX_ENTRIES=64'] : []),
         '-e',
         `BROADCAST_CONNECTION=${onlySharing ? 'reverb' : 'log'}`,
         '-e', 'REVERB_APP_ID=fixture',
@@ -156,7 +163,7 @@ try {
         'sh',
         image,
         '-c',
-        `php artisan config:clear && php -r 'touch("/tmp/docs.sqlite");' && php artisan migrate --force && ${onlySharing ? `(php artisan reverb:start --host=127.0.0.1 --port=${socketPort} & php artisan serve --host=127.0.0.1 --port=${port})` : `php artisan serve --host=127.0.0.1 --port=${port}`}`
+        `php artisan config:clear && php -r 'touch("/tmp/docs.sqlite");' && php artisan migrate --force && ${onlySharing ? `(php artisan reverb:start --host=127.0.0.1 --port=${socketPort} & php artisan serve --host=127.0.0.1 --port=${port})` : onlyStorageConcurrency ? `php -d opcache.enable=0 -d opcache.enable_cli=0 -S 127.0.0.1:${port} -t public public/index.php` : `php artisan serve --host=127.0.0.1 --port=${port}`}`
     );
     for (let i = 0; i < 80; i++) {
         try {
@@ -179,7 +186,11 @@ try {
         })
     );
     browser = await chromium.launch(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {});
-    if (onlyHeader) {
+    if (onlyStorageConcurrency) {
+        checks.push(...await storageConcurrency({ browser, base, jwt, container }));
+    } else if (onlyStorage) {
+        checks.push(...await storage({ browser, base, jwt, container }));
+    } else if (onlyHeader) {
         checks.push(await header({ browser, base, jwt, dir, baseline }));
     } else if (onlyUi) {
         const result = await ui({ browser, base, jwt, dir });
@@ -192,7 +203,7 @@ try {
     } else if (onlyPublic) {
         checks.push(await publicLinks({ browser, base, jwt, dir, fixture }));
     } else if (onlySharing) {
-        checks.push(await sharing({ browser, base, jwt, dir, socketPort }));
+        checks.push(await sharing({ browser, base, jwt, dir, socketPort, layout: !onlySharingBackend }));
     } else if (onlyNavigation) {
         checks.push(await navigation({ browser, base, jwt, dir }));
     } else {

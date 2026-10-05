@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Requests;
 
-use App\Models\User;
 use App\Models\Vault;
 use App\Rules\VaultNodeName;
 use Illuminate\Foundation\Http\FormRequest;
@@ -16,9 +15,6 @@ final class UpdateVaultRequest extends FormRequest
     /** @return array<string, array<int, mixed>> */
     public function rules(): array
     {
-        /** @var User $user */
-        $user = $this->user();
-
         /** @var Vault $vault */
         $vault = $this->route('vault');
 
@@ -29,7 +25,7 @@ final class UpdateVaultRequest extends FormRequest
                 'max:255',
                 new VaultNodeName(),
                 Rule::unique(Vault::class)
-                    ->where('created_by', $user->id)
+                    ->where('created_by', $vault->created_by)
                     ->ignore($this->route('vault')),
             ],
             'templates_node_id' => [

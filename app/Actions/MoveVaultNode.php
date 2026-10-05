@@ -6,13 +6,13 @@ namespace App\Actions;
 
 use App\Models\Vault;
 use App\Models\VaultNode;
-use Illuminate\Support\Facades\DB;
+use App\Services\VaultStorage;
 
 final readonly class MoveVaultNode
 {
     public function handle(VaultNode $node, ?int $parentId): VaultNode
     {
-        return DB::transaction(function () use ($node, $parentId): VaultNode {
+        return app(VaultStorage::class)->run(function () use ($node, $parentId): VaultNode {
             $vault = Vault::whereKey($node->vault_id)->lockForUpdate()->firstOrFail();
             $node->refresh();
             app(CheckParent::class)->handle($vault, $parentId, $node);
