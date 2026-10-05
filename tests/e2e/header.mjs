@@ -5,6 +5,7 @@ import { tools, options, format } from './editor.mjs';
 // clipped menus, lost selection/focus, disabled formatting bypass, lost saves,
 // stale tools after SPA navigation/close, or missing home/search/tree/account.
 // The mode action must stay neutral: the pen offers editing, not a selected state.
+// Reading hides formatting at every width, without losing desktop print/view options.
 export async function header({ browser, base, jwt, dir, baseline }) {
     const context = await browser.newContext({ hasTouch: true, viewport: { width: 1440, height: 900 }, extraHTTPHeaders: { 'Cf-Access-Jwt-Assertion': jwt('alex@example.test') } });
     const page = await context.newPage();
@@ -114,9 +115,24 @@ export async function header({ browser, base, jwt, dir, baseline }) {
             assert(await page.getByRole('button', { name: 'Search documents', exact: true }).isVisible());
             for (const width of [1440, 390]) {
                 await page.setViewportSize({ width, height: 844 });
+                await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
                 const edit = page.getByRole('button', { name: 'Edit document', exact: true });
                 assert.notEqual(await edit.getAttribute('aria-pressed'), 'true');
                 assert.equal(await edit.evaluate(el => el.classList.contains('bg-accent')), false);
+                assert.equal(await page.getByRole('group', { name: 'Document formatting' }).count(), 0);
+                if (width === 1440) {
+                    await page.getByRole('button', { name: 'More editor options', exact: true }).click();
+                    await page.getByRole('menuitem', { name: 'Print', exact: true }).waitFor();
+                    await page.keyboard.press('Escape');
+                    await edit.click();
+                    await page.getByRole('group', { name: 'Document formatting' }).waitFor();
+                    await page.getByRole('button', { name: 'Read document', exact: true }).click();
+                    await page.reload();
+                    await page.locator('.tiptap[contenteditable="false"]').waitFor();
+                    assert.equal(await page.getByRole('group', { name: 'Document formatting' }).count(), 0);
+                    await page.mouse.move(0, 200);
+                    await page.screenshot({ path: new URL('header-read-1440.png', dir).pathname, animations: 'disabled' });
+                }
             }
             await page.getByRole('group', { name: 'Document formatting' }).waitFor({ state: 'hidden' });
             await page.mouse.move(0, 200);

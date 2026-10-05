@@ -387,7 +387,7 @@ const groups: ToolGroup[] = [
             @click="emit('toggle')"
         />
     </Teleport>
-    <div v-if="!isSmallScreen || expanded" class="text-muted-foreground min-w-0 max-w-full" role="group" aria-label="Document formatting">
+    <div v-if="!isSmallScreen || expanded" v-show="isEditMode" class="text-muted-foreground min-w-0 max-w-full" role="group" aria-label="Document formatting">
         <div class="border-border/50 bg-muted/25 flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border p-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <MarkdownToolbarButton title="Bold" :icon="Bold" :active="marks.bold" :disabled="isToolbarLocked" @click="toggleBold" />
             <MarkdownToolbarButton title="Italic" :icon="Italic" :active="marks.italic" :disabled="isToolbarLocked" @click="toggleItalic" />
