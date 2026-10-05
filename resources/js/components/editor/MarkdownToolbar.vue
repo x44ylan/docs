@@ -375,7 +375,6 @@ const groups: ToolGroup[] = [
         <MarkdownToolbarButton
             :title="isEditMode ? 'Read document' : 'Edit document'"
             :icon="isEditMode ? Eye : PenLine"
-            :active="!isEditMode"
             @click="toggleEditMode"
         />
         <MarkdownToolbarButton
