@@ -722,7 +722,8 @@ try {
         await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Lists');
         await page.getByRole('button', { name: 'Read document', exact: true }).click();
         await page.locator('.tiptap[contenteditable="false"]').waitFor();
-        assert(await page.getByRole('button', { name: 'Heading', exact: true }).isDisabled());
+        assert.equal(await page.getByRole('group', { name: 'Document formatting' }).count(), 0);
+        assert.equal(await page.getByRole('button', { name: 'Show formatting', exact: true }).count(), 0);
         await page.getByRole('button', { name: 'Edit document', exact: true }).click();
         await editor.waitFor();
         await options(page);

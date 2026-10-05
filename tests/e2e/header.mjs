@@ -104,7 +104,18 @@ export async function header({ browser, base, jwt, dir, baseline }) {
         }
         await page.getByRole('button', { name: 'Read document', exact: true }).click();
         await page.locator('.tiptap[contenteditable="false"]').waitFor();
-        assert(await page.getByRole('button', { name: 'Heading', exact: true }).isDisabled());
+        if (baseline) assert(await page.getByRole('button', { name: 'Heading', exact: true }).isDisabled());
+        else {
+            assert.equal(await page.getByRole('button', { name: 'Show formatting', exact: true }).count(), 0);
+            assert.equal(await page.getByRole('button', { name: 'Close formatting', exact: true }).count(), 0);
+            assert.equal(await page.getByRole('group', { name: 'Document formatting' }).count(), 0);
+            assert(await title.isVisible());
+            assert(await page.getByRole('button', { name: 'Search documents', exact: true }).isVisible());
+            await page.screenshot({ path: new URL('header-read-390.png', dir).pathname, animations: 'disabled' });
+            await page.reload();
+            await page.locator('.tiptap[contenteditable="false"]').waitFor();
+            assert.equal(await page.getByRole('button', { name: 'Show formatting', exact: true }).count(), 0);
+        }
         await page.getByRole('button', { name: 'Edit document', exact: true }).click();
         await options(page);
         await page.getByRole('menuitem', { name: 'Markdown source', exact: true }).click();

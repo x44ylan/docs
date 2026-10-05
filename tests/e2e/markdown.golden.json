@@ -60,9 +60,9 @@
     "```\nplain\n  indented\n```\n\n```js\nconst a = \"<b>&amp;</b>\";\n```\n\n```html\n<div class=\"card\">Preview</div>\n```\n\n```\nindented code block\n```\n\n```archify\n{\"nodes\":[{\"id\":\"a\",\"label\":\"A\"}],\"edges\":[]}\n```"
   ],
   "links": [
-    "[text](https://example.test \"Title\") <https://angle.test> https://bare.test mail@example.test <mail@example.test> [vault](Some Folder/My Note.md) [enc](Folder%20Name/a%20b.md)",
-    "[text](https://example.test \"Title\") <https://angle.test> https://bare.test mail@example.test <mail@example.test> [vault](Some Folder/My Note.md) [enc](Folder%20Name/a%20b.md)",
-    "[text](https://example.test \"Title\") <https://angle.test> https://bare.test mail@example.test <mail@example.test> [vault](Some Folder/My Note.md) [enc](Folder%20Name/a%20b.md)"
+    "[text](https://example.test \"Title\") <https://angle.test> https://bare.test mail@example.test <mail@example.test> [vault](Some Folder/My Note.md) [enc](Folder Name/a b.md)",
+    "[text](https://example.test \"Title\") <https://angle.test> https://bare.test mail@example.test <mail@example.test> [vault](Some Folder/My Note.md) [enc](Folder Name/a b.md)",
+    "[text](https://example.test \"Title\") <https://angle.test> https://bare.test mail@example.test <mail@example.test> [vault](Some Folder/My Note.md) [enc](Folder Name/a b.md)"
   ],
   "images": [
     "![alt](image.png) ![titled](dir/a b.png \"Caption\") ![](/files/12?path=x.png) text after",

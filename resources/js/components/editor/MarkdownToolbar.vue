@@ -379,7 +379,7 @@ const groups: ToolGroup[] = [
             @click="toggleEditMode"
         />
         <MarkdownToolbarButton
-            v-if="isSmallScreen"
+            v-if="isSmallScreen && isEditMode"
             :title="expanded ? 'Close formatting' : 'Show formatting'"
             :icon="expanded ? Check : Type"
             :active="expanded"

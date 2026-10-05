@@ -5,6 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 // Saved Markdown must stay byte-for-byte identical when the serializer changes.
 // The golden file was recorded from the full-document Turndown implementation;
 // run with UPDATE_MARKDOWN_GOLDEN=1 only when a format change is intended.
+// Encoded link spaces now normalize like raw spaces after fixing double encoding.
 const golden = new URL('./markdown.golden.json', import.meta.url);
 
 const long = Array.from({ length: 120 }, (_, i) => [

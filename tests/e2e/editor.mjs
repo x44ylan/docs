@@ -1,4 +1,10 @@
 export async function tools(page) {
+    // Resizing updates CSS before Vue moves the toolbar controls.
+    await page.waitForFunction(() => {
+        const toggle = document.querySelector('[aria-controls="file-tools"]');
+        const editing = document.querySelector('[aria-label="Read document"]');
+        return Boolean(toggle) === (innerWidth < 1024 && Boolean(editing));
+    });
     const show = page.getByRole('button', { name: 'Show formatting', exact: true });
     if (await show.isVisible()) await show.click();
 }

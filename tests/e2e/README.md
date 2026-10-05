@@ -3,9 +3,16 @@
 ## Failure cases to cover before changing the implementation
 
 - Nested-note parent paths must be visible above the title inside the same 60px
-  header, shorten to the nearest parent on phones, and truncate long names without
+  header, keep every parent on phones, and truncate long names without
   squeezing controls. Preserve the full path tooltip, rename/SPA updates, and hide
   redundant paths on the vault's main note and while compact formatting is open.
+- Reading mode must hide the phone formatting toggle and collapse open tools,
+  restoring the title/search/account without changing editor content. Switching
+  back to editing and reloading must preserve the preference and usable controls.
+- Encoded TOC paths (including Labs' absolute paths with %20) must open their
+  exact child notes in edit/read modes on phone/desktop, without full reloads.
+  Preserve raw-space and relative paths, external URL escapes and one-decode
+  semantics; saving/reloading must not progressively encode links.
 
 - Compact formatting must open in the existing header, scroll without moving the
   page, preserve text selection, and return to the title/search/account controls.

@@ -37,7 +37,7 @@ export async function ui({ browser, base, jwt, dir }) {
         const parents = page.getByLabel('Parent path', { exact: true });
         for (const width of [320, 390, 1024, 1440]) {
             await page.setViewportSize({ width, height: 900 });
-            await page.waitForFunction(small => document.querySelector('[aria-label="Parent path"]')?.textContent.trim() === (small ? '… / Getting started' : 'Design notes / Getting started'), width < 1024);
+            await page.waitForFunction(() => document.querySelector('[aria-label="Parent path"]')?.textContent.trim() === 'Design notes / Getting started');
             for (const theme of ['light', 'dark']) {
                 await page.evaluate(theme => document.documentElement.classList.toggle('dark', theme === 'dark'), theme);
                 assert(await parents.isVisible());
@@ -62,7 +62,7 @@ export async function ui({ browser, base, jwt, dir }) {
         await page.reload();
         await parents.getByText(`Design notes / ${longParent}`, { exact: true }).waitFor();
         await page.setViewportSize({ width: 320, height: 900 });
-        await page.waitForFunction(name => document.querySelector('[aria-label="Parent path"]')?.textContent.trim() === `… / ${name}`, longParent);
+        await page.waitForFunction(name => document.querySelector('[aria-label="Parent path"]')?.textContent.trim() === `Design notes / ${name}`, longParent);
         assert(await parents.evaluate(el => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow === 'ellipsis'), 'Long parents truncate');
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         assert((await title.boundingBox()).width >= 100);

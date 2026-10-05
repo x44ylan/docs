@@ -16,6 +16,7 @@ import { useEditor } from '@/composables/useEditor';
 import { useModalManager } from '@/composables/useModalManager';
 import { useScreenSize } from '@/composables/useScreenSize';
 import { useToast } from '@/composables/useToast';
+import { useTiptapPreferences } from '@/composables/useTiptapPreferences';
 import { useVaultActions } from '@/composables/useVaultActions';
 import { useVaultTreeActions } from '@/composables/useVaultTreeActions';
 import Bars3BottomLeft from '@/icons/Bars3BottomLeft.vue';
@@ -75,6 +76,8 @@ syncPanelsWithScreen(isSmallScreen.value);
 
 const openedFile = ref(props.openedFile ?? null);
 const showFormatting = ref(false);
+const { isEditMode } = useTiptapPreferences();
+watch(isEditMode, () => { showFormatting.value = false; });
 watch(isSmallScreen, () => { showFormatting.value = false; });
 watch(() => openedFile.value?.file.id, () => { showFormatting.value = false; });
 const documentPath = computed(() => {
@@ -279,7 +282,7 @@ useEcho<{ data: { user_id: number } }>(
             </div>
             <div v-show="!isSmallScreen || !showFormatting" id="file-header" class="flex min-w-0 flex-1 flex-col justify-center" aria-label="Document path" :title="documentPath.join(' / ')">
                 <span v-if="openedFile && parentPath.length" class="text-muted-foreground w-full truncate text-[11px] leading-4" aria-label="Parent path">
-                    {{ isSmallScreen ? `${parentPath.length > 1 ? '… / ' : ''}${parentPath.at(-1)}` : parentPath.join(' / ') }}
+                    {{ parentPath.join(' / ') }}
                 </span>
                 <span v-if="!openedFile" class="text-foreground truncate text-sm font-medium">{{ vaultStore.name || vault.name }}</span>
             </div>

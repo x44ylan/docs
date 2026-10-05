@@ -82,7 +82,9 @@ export function useEditor(options: SetupEditorOptions) {
                 }
 
                 try {
-                    return `[${text}](${encodeURI(path)}${title})`;
+                    // Encode raw spaces without encoding existing URL escapes twice.
+                    const href = encodeURI(path).replace(/%25([\da-f]{2})/gi, '%$1');
+                    return `[${text}](${href}${title})`;
                 } catch {
                     return `[${text}](${path}${title})`;
                 }

@@ -15,6 +15,45 @@ export async function navigation({ browser, base, jwt, dir }) {
             if (!response.ok) throw new Error(await response.text());
             return response.json();
         }, { path, method, data });
+        // Reproduce Labs' encoded TOC with disposable content only.
+        const labsVault = (await request('/vaults', 'POST', { name: 'TOC' })).data;
+        const labsPath = `/vaults/${labsVault.id}`;
+        const labs = (await request(`${labsPath}/nodes`, 'POST', { name: 'Labs', parent_id: null, is_file: true })).data;
+        const topics = ['Dynamic Programming', 'Harness Architecture', 'Mobile App', 'Software Design'];
+        const toc = [];
+        for (const name of topics) {
+            const note = (await request(`${labsPath}/nodes`, 'POST', { name, parent_id: labs.id, is_file: true })).data;
+            await request(`${labsPath}/nodes/${note.id}`, 'PATCH', { content: `# ${name}\n\n[Back](../Labs.md)` });
+            toc.push(`- [${name}](/Labs/${encodeURIComponent(name)}.md)`);
+        }
+        await request(`${labsPath}/nodes/${labs.id}`, 'PATCH', { content: `# Labs\n\n${toc.join('\n')}\n\n[External](https://example.test/a%20b?q=c%2Fd)` });
+        for (const width of [390, 1440]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.goto(`${base}${labsPath}?file=${labs.id}`);
+            await page.locator('.tiptap').getByRole('heading', { name: 'Labs', exact: true }).waitFor();
+            await page.evaluate(() => { window.tocHeader = document.querySelector('#app-header'); });
+            for (const mode of ['read', 'edit']) {
+                await page.getByRole('button', { name: mode === 'read' ? 'Read document' : 'Edit document', exact: true }).click();
+                for (const name of topics) {
+                    const link = page.locator('.tiptap a').filter({ hasText: new RegExp(`^${name}$`) });
+                    assert.equal(await link.getAttribute('data-href'), `/Labs/${encodeURIComponent(name)}.md`, 'TOC escapes must not be double-encoded');
+                    await link.click();
+                    await page.waitForFunction(name => document.querySelector('[aria-label="Document title"]')?.value === name, name);
+                    await page.locator('.tiptap a').filter({ hasText: /^Back$/ }).click();
+                    await page.locator('.tiptap').getByRole('heading', { name: 'Labs', exact: true }).waitFor();
+                    assert(await page.evaluate(() => window.tocHeader === document.querySelector('#app-header')), 'TOC navigation stays in the SPA');
+                }
+            }
+            assert.equal(await page.locator('.tiptap a').filter({ hasText: /^External$/ }).getAttribute('href'), 'https://example.test/a%20b?q=c%2Fd');
+        }
+        await page.locator('.tiptap').press('ControlOrMeta+End');
+        const tocSaved = page.waitForResponse(response => response.request().method() === 'PATCH' && response.url().includes(`/nodes/${labs.id}`));
+        await page.keyboard.press('Enter');
+        await page.keyboard.type('A saved edit');
+        assert.equal((await tocSaved).status(), 200);
+        await page.reload();
+        await page.locator('.tiptap a').filter({ hasText: /^Dynamic Programming$/ }).click();
+        await page.waitForFunction(() => document.querySelector('[aria-label="Document title"]')?.value === 'Dynamic Programming');
         const vault = (await request('/vaults', 'POST', { name: 'Navigation' })).data;
         const path = `/vaults/${vault.id}`;
         const create = async (name, parent_id = null) => (await request(`${path}/nodes`, 'POST', { name, parent_id, is_file: true })).data;
@@ -249,7 +288,7 @@ export async function navigation({ browser, base, jwt, dir }) {
         assert.equal(await page.getByText('Recent files', { exact: true }).count(), 0);
         assert.equal((await (await fetch(share, { headers: { Accept: 'application/json' } })).json()).selected, null);
         assert.deepEqual(errors, []);
-        return 'Vault main note opens at 320/390/1440px and in public links; root index fallback opens anonymously at 390/1440px, keeps named-note priority and explicit links, excludes nested indexes and handles rename/delete. Missing main notes and empty vaults are safe. SPA shell, save-before-return/switch, failure/retry, note links beyond recents, isolated undo, latest-click wins, history and branch-only arrows work';
+        return 'Labs-style encoded TOC links open all four children in edit/read modes at 390/1440px without reloads; relative return links, external URL escapes and save/reload work. Vault main note opens at 320/390/1440px and in public links; root index fallback opens anonymously at 390/1440px, keeps named-note priority and explicit links, excludes nested indexes and handles rename/delete. Missing main notes and empty vaults are safe. SPA shell, save-before-return/switch, failure/retry, note links beyond recents, isolated undo, latest-click wins, history and branch-only arrows work';
     } catch (error) {
         await page.screenshot({ path: new URL('navigation-failure.png', dir).pathname }).catch(() => {});
         throw error;
