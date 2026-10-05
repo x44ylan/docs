@@ -2,6 +2,9 @@
 
 ## Failure cases to cover before changing the implementation
 
+- Mobile home navigation must stay visible beside the tree toggle in read/edit
+  mode, retain its 36px target, and return to the vault list. At 320px, truncate
+  the title instead of shrinking controls or overflowing the shared header.
 - Nested-note parent paths must be visible above the title inside the same 60px
   header, keep every parent on phones, and truncate long names without
   squeezing controls. Preserve the full path tooltip, rename/SPA updates, and hide
@@ -22,7 +25,7 @@
 
 - One 60px header must contain navigation, editable title and editor controls,
   with no secondary title/toolbar row. Check 320/390/639/640/768/1023/1024/1440px
-  in both themes; the title stays at least 100px wide with a 16px font on phones
+  in both themes; the title stays at least 100px wide (64px below 360px) with a 16px font on phones
   to avoid Safari input zoom. Formatting is centred on desktop and opens as a
   swipeable strip on phones. Extra styles use the More panel. Preserve selection,
   keyboard focus, source/read locks, every command, rename/autosave/reload,

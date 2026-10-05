@@ -45,7 +45,7 @@ export async function ui({ browser, base, jwt, dir }) {
                 const parentBox = await parents.boundingBox();
                 const titleBox = await title.boundingBox();
                 assert(parentBox.y >= 0 && parentBox.y + parentBox.height <= titleBox.y, 'Parent path sits above title');
-                assert(titleBox.width >= 100 && titleBox.y + titleBox.height <= 60, 'Title remains usable inside header');
+                assert(titleBox.width >= (width < 360 ? 64 : 100) && titleBox.y + titleBox.height <= 60, 'Title remains usable inside header');
                 assert.equal(await page.locator('#app-header').evaluate(el => el.parentElement.getBoundingClientRect().height), 60);
                 assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
                 await page.screenshot({ path: new URL(`ui-path-${width}-${theme}.png`, dir).pathname, animations: 'disabled' });
@@ -65,7 +65,7 @@ export async function ui({ browser, base, jwt, dir }) {
         await page.waitForFunction(name => document.querySelector('[aria-label="Parent path"]')?.textContent.trim() === `Design notes / ${name}`, longParent);
         assert(await parents.evaluate(el => el.scrollWidth > el.clientWidth && getComputedStyle(el).textOverflow === 'ellipsis'), 'Long parents truncate');
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-        assert((await title.boundingBox()).width >= 100);
+        assert((await title.boundingBox()).width >= 64);
         assert.match(await breadcrumb.getAttribute('title'), new RegExp(longParent));
         await request(`${path}/nodes/${project.id}`, 'PATCH', { name: 'Getting started' });
         await page.setViewportSize({ width: 1440, height: 900 });

@@ -267,7 +267,7 @@ useEcho<{ data: { user_id: number } }>(
     <Teleport defer to="#app-header">
         <div class="flex min-w-0 items-center gap-1 sm:gap-3" :class="isSmallScreen && showFormatting ? 'shrink-0' : 'flex-1'">
             <div class="flex shrink-0 items-center gap-1">
-                <Link v-show="!isSmallScreen || !showFormatting" href="/vaults" aria-label="Docs home" title="Docs" class="hidden size-9 items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-ring sm:inline-flex">
+                <Link v-show="!isSmallScreen || !showFormatting" href="/vaults" aria-label="Docs home" title="Docs" class="inline-flex size-9 items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-ring">
                     <Doc class="size-4.5" />
                 </Link>
                 <button

@@ -82,10 +82,9 @@ async function checkHeader(count) {
         }),
         'All header controls must be 36px and vertically centered'
     );
-    const compactEditor = count === 3 && page.viewportSize().width < 640;
-    assert.equal(await header.getByRole('link', { name: 'Docs home' }).isVisible(), !compactEditor);
+    assert(await header.getByRole('link', { name: 'Docs home' }).isVisible());
     assert.equal(await header.getByRole('button').count(), count === 3 ? (page.viewportSize().width >= 1024 ? 13 : 5) : count);
-    if (!compactEditor) assert(
+    assert(
         await header
             .getByRole('link', { name: 'Docs home' })
             .evaluate((el) => el.getBoundingClientRect().left < innerWidth / 2)
@@ -519,7 +518,7 @@ try {
                 'Title belongs in the shared header at every width'
             );
             assert(
-                await title.evaluate((el) => el.getBoundingClientRect().width >= 100),
+                await title.evaluate((el) => el.getBoundingClientRect().width >= (innerWidth < 360 ? 64 : 100)),
                 'Title has usable space even at 320px'
             );
             if (width >= 1024) assert(await page.getByRole('group', { name: 'Document formatting' }).evaluate(el => Boolean(el.closest('#app-header'))), 'No secondary formatting row');

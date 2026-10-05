@@ -45,7 +45,10 @@ export async function header({ browser, base, jwt, dir, baseline }) {
                         assert(await formatting.isVisible());
                         assert.equal(await formatting.locator('svg.lucide-text-initial').count(), 1);
                     }
-                    assert((await title.boundingBox()).width >= 100, `${width}px title is too narrow`);
+                    assert((await title.boundingBox()).width >= (width < 360 ? 64 : 100), `${width}px title is too narrow`);
+                    const home = page.getByRole('link', { name: 'Docs home', exact: true });
+                    assert(await home.isVisible());
+                    assert.equal((await home.boundingBox()).width, 36);
                     assert(await page.locator('#app-header').evaluate(el => {
                         const boxes = [...el.querySelectorAll('button, a, input')].map(control => control.getBoundingClientRect()).filter(box => box.width && box.height);
                         return boxes.every(box => box.left >= 0 && box.right <= innerWidth && Math.abs(box.top + box.height / 2 - 30) < 1);
@@ -175,6 +178,19 @@ export async function header({ browser, base, jwt, dir, baseline }) {
         await page.getByRole('menuitem', { name: 'Vaults', exact: true }).waitFor();
         await page.keyboard.press('Escape');
         if (!baseline) {
+            for (const width of [320, 390]) {
+                await page.setViewportSize({ width, height: 844 });
+                for (const mode of ['edit', 'read']) {
+                    await page.goto(`${base}${path}?file=${note.id}`);
+                    await editor.waitFor();
+                    const toggle = page.getByRole('button', { name: mode === 'read' ? 'Read document' : 'Edit document', exact: true });
+                    if (await toggle.isVisible()) await toggle.click();
+                    await page.getByRole('link', { name: 'Docs home', exact: true }).click();
+                    await page.getByRole('link', { name: 'Open Header check', exact: true }).waitFor();
+                }
+            }
+            await page.goto(`${base}${path}?file=${note.id}`);
+            await page.getByRole('button', { name: 'Edit document', exact: true }).click();
             await options(page);
             await page.getByRole('menuitem', { name: 'Close file', exact: true }).click();
             await page.getByText('Select a note', { exact: true }).waitFor();
