@@ -87,7 +87,7 @@ async function checkHeader(count) {
     assert(
         await header
             .getByRole('link', { name: 'Docs home' })
-            .evaluate((el) => el.getBoundingClientRect().left < innerWidth / 2)
+            .evaluate((el, phoneEditor) => phoneEditor ? el.getBoundingClientRect().left >= innerWidth / 2 : el.getBoundingClientRect().left < innerWidth / 2, count === 3 && page.viewportSize().width < 640)
     );
     assert(
         await header

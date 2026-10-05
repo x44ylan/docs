@@ -47,8 +47,12 @@ export async function header({ browser, base, jwt, dir, baseline }) {
                     }
                     assert((await title.boundingBox()).width >= (width < 360 ? 64 : 100), `${width}px title is too narrow`);
                     const home = page.getByRole('link', { name: 'Docs home', exact: true });
+                    assert.equal(await home.count(), 1);
                     assert(await home.isVisible());
                     assert.equal((await home.boundingBox()).width, 36);
+                    const homeBox = await home.boundingBox();
+                    const userBox = await page.getByRole('button', { name: 'User menu', exact: true }).boundingBox();
+                    assert(width < 640 ? homeBox.x > userBox.x : homeBox.x < (await title.boundingBox()).x, 'Home is rightmost on phones and left on desktop');
                     assert(await page.locator('#app-header').evaluate(el => {
                         const boxes = [...el.querySelectorAll('button, a, input')].map(control => control.getBoundingClientRect()).filter(box => box.width && box.height);
                         return boxes.every(box => box.left >= 0 && box.right <= innerWidth && Math.abs(box.top + box.height / 2 - 30) < 1);
@@ -185,6 +189,7 @@ export async function header({ browser, base, jwt, dir, baseline }) {
                     await editor.waitFor();
                     const toggle = page.getByRole('button', { name: mode === 'read' ? 'Read document' : 'Edit document', exact: true });
                     if (await toggle.isVisible()) await toggle.click();
+                    assert((await page.getByRole('link', { name: 'Docs home', exact: true }).boundingBox()).x > (await page.getByRole('button', { name: 'User menu', exact: true }).boundingBox()).x);
                     await page.getByRole('link', { name: 'Docs home', exact: true }).click();
                     await page.getByRole('link', { name: 'Open Header check', exact: true }).waitFor();
                 }

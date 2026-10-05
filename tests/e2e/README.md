@@ -2,8 +2,9 @@
 
 ## Failure cases to cover before changing the implementation
 
-- Mobile home navigation must stay visible beside the tree toggle in read/edit
-  mode, retain its 36px target, and return to the vault list. At 320px, truncate
+- Phone home navigation must stay at the right end of the header in read/edit
+  mode, retain its 36px target, and return to the vault list. Desktop keeps Home
+  on the left; only one Home link is exposed at each width. At 320px, truncate
   the title instead of shrinking controls or overflowing the shared header.
 - Nested-note parent paths must be visible above the title inside the same 60px
   header, keep every parent on phones, and truncate long names without
