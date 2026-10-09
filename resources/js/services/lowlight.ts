@@ -83,6 +83,7 @@ export function createLazyLowlight(onLoad: (grammar: string) => void) {
     // Archify source is JSON; avoid expensive language auto-detection on
     // larger diagrams, including while the rich editor is hidden.
     lowlight.registerAlias({ json: 'archify' });
+    lowlight.registerAlias({ plaintext: 'mermaid' });
 
     const loading = new Set<string>();
     const registered = lowlight.registered;

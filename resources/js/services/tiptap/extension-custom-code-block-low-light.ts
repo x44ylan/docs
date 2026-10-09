@@ -5,6 +5,8 @@ import { preview } from '@/services/preview';
 import { defineAsyncComponent, h, render as renderVue } from 'vue';
 
 const Diagram = defineAsyncComponent(() => import('@/components/Diagram.vue'));
+const Mermaid = defineAsyncComponent(() => import('@/components/Mermaid.vue'));
+const isDiagramLanguage = (language?: string) => ['archify', 'mermaid'].includes(language?.toLowerCase() ?? '');
 
 export const CustomCodeBlockLowlight = CodeBlockLowlight.extend({
     addNodeView(): NodeViewRenderer {
@@ -18,7 +20,7 @@ export const CustomCodeBlockLowlight = CodeBlockLowlight.extend({
             getPos: () => number | undefined;
         }) => {
             let current = node;
-            let showingPreview = node.attrs.language?.toLowerCase() === 'archify';
+            let showingPreview = isDiagramLanguage(node.attrs.language);
             let frame: HTMLIFrameElement | undefined;
             let diagramRoot: HTMLDivElement | undefined;
             let timer: ReturnType<typeof setTimeout> | undefined;
@@ -90,6 +92,9 @@ export const CustomCodeBlockLowlight = CodeBlockLowlight.extend({
             }
 
             const code = document.createElement('code');
+            // Keep Chrome from dropping this editing surface when replacing
+            // all its text; inline wrappers can be lifted into the parent pre.
+            code.style.display = 'block';
             code.classList.add(`language-${node.attrs.language || 'text'}`);
 
             pre.appendChild(header);
@@ -100,7 +105,8 @@ export const CustomCodeBlockLowlight = CodeBlockLowlight.extend({
                 clearTimeout(timer);
                 const language = current.attrs.language || 'text';
                 const isHtml = language.toLowerCase() === 'html';
-                const isDiagram = language.toLowerCase() === 'archify';
+                const isDiagram = isDiagramLanguage(language);
+                const isMermaid = language.toLowerCase() === 'mermaid';
                 languageSpan.textContent = language === 'plaintext' ? 'text' : language;
                 code.className = `language-${language}`;
                 toggle.hidden = !isHtml && !isDiagram;
@@ -108,12 +114,15 @@ export const CustomCodeBlockLowlight = CodeBlockLowlight.extend({
                 toggle.textContent = showingPreview ? 'Code' : 'Preview';
                 toggle.setAttribute(
                     'aria-label',
-                    isDiagram
+                    isMermaid
+                        ? (showingPreview ? 'Show Mermaid code' : 'Preview Mermaid')
+                        : isDiagram
                         ? (showingPreview ? 'Show diagram code' : 'Preview diagram')
                         : (showingPreview ? 'Show HTML code' : 'Preview HTML'),
                 );
                 toggle.setAttribute('aria-pressed', String(showingPreview));
                 code.hidden = showingPreview;
+                code.style.display = showingPreview ? 'none' : 'block';
                 pre.hidden = isDiagram && showingPreview;
                 header.style.marginBottom = showingPreview ? '0' : '';
                 pre.style.marginBottom = showingPreview ? '0' : '';
@@ -141,7 +150,7 @@ export const CustomCodeBlockLowlight = CodeBlockLowlight.extend({
                         diagramRoot.contentEditable = 'false';
                         container.appendChild(diagramRoot);
                     }
-                    renderVue(h(Diagram, {
+                    renderVue(h(isMermaid ? Mermaid : Diagram, {
                         source: current.textContent,
                         onCode: () => { showingPreview = false; render(); },
                     }), diagramRoot);
@@ -162,7 +171,7 @@ export const CustomCodeBlockLowlight = CodeBlockLowlight.extend({
                         updated.textContent !== current.textContent ||
                         updated.attrs.language !== current.attrs.language;
                     if (updated.attrs.language !== current.attrs.language) {
-                        showingPreview = updated.attrs.language?.toLowerCase() === 'archify';
+                        showingPreview = isDiagramLanguage(updated.attrs.language);
                     }
                     current = updated;
                     if (changed) {

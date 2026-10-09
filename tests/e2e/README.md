@@ -1,5 +1,9 @@
 # Browser checks
 
+Mermaid: `node tests/e2e/run.mjs docs:mermaid --mermaid` after building
+`docker build --network=host -t docs:mermaid .`. Uses disposable data; writes
+`artifacts/e2e/mermaid.json` and phone/desktop screenshots in both themes.
+
 ## Failure cases to cover before changing the implementation
 
 - Phone home navigation must stay at the right end of the header in read/edit

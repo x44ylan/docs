@@ -8,6 +8,7 @@ import { createServer } from 'node:net';
 import { html } from './html.mjs';
 import { auth } from './auth.mjs';
 import { diagram } from './diagram.mjs';
+import { mermaid } from './mermaid.mjs';
 import { tree } from './tree.mjs';
 import { navigation } from './navigation.mjs';
 import { markdown } from './markdown.mjs';
@@ -31,12 +32,13 @@ const onlyMcp = process.argv.includes('--mcp');
 const iconsOnly = process.argv.includes('--icons-only');
 const onlyUi = process.argv.includes('--ui');
 const onlyHeader = process.argv.includes('--header');
+const onlyMermaid = process.argv.includes('--mermaid');
 const onlyStorage = process.argv.includes('--storage');
 const onlyStorageConcurrency = process.argv.includes('--storage-concurrency');
 const withPreview = onlyUi && process.argv.includes('--preview');
 const dir = new URL('../../artifacts/e2e/', import.meta.url);
 await mkdir(dir, { recursive: true });
-const report = new URL(`${onlyStorageConcurrency ? (baseline ? 'storage-concurrency-before' : 'storage-concurrency') : onlyStorage ? (baseline ? 'storage-before' : 'storage') : onlyHeader ? 'header' : onlyUi ? 'ui' : onlyMcp ? 'mcp' : onlyPublic ? 'public' : onlySharing ? (onlySharingBackend ? 'sharing-backend' : 'sharing') : onlyNavigation ? 'navigation' : baseline ? 'before' : 'report'}.json`, dir);
+const report = new URL(`${onlyMermaid ? 'mermaid' : onlyStorageConcurrency ? (baseline ? 'storage-concurrency-before' : 'storage-concurrency') : onlyStorage ? (baseline ? 'storage-before' : 'storage') : onlyHeader ? 'header' : onlyUi ? 'ui' : onlyMcp ? 'mcp' : onlyPublic ? 'public' : onlySharing ? (onlySharingBackend ? 'sharing-backend' : 'sharing') : onlyNavigation ? 'navigation' : baseline ? 'before' : 'report'}.json`, dir);
 const started = new Date().toISOString();
 await writeFile(report, JSON.stringify({ image, started, status: 'running' }, null, 2));
 const docker = (...args) =>
@@ -190,6 +192,8 @@ try {
         checks.push(...await storageConcurrency({ browser, base, jwt, container }));
     } else if (onlyStorage) {
         checks.push(...await storage({ browser, base, jwt, container }));
+    } else if (onlyMermaid) {
+        checks.push(await mermaid({ browser, base, jwt, dir }));
     } else if (onlyHeader) {
         checks.push(await header({ browser, base, jwt, dir, baseline }));
     } else if (onlyUi) {
@@ -1086,6 +1090,7 @@ try {
         checks.push(await tree({ browser, base, jwt, dir }));
         checks.push(await navigation({ browser, base, jwt, dir }));
         checks.push(await markdown({ browser, base, jwt, dir }));
+        checks.push(await mermaid({ browser, base, jwt, dir }));
     }
     }
     }

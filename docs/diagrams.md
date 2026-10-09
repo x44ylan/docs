@@ -1,5 +1,22 @@
 # Diagrams
 
+## Mermaid
+
+Use a `mermaid` fenced block for a diagram preview in notes and public links.
+The code icon edits the source; zoom, drag to pan, or expand for a larger view.
+Invalid syntax shows an error without changing your Markdown. Diagram scripts,
+external resources and clickable links are disabled. Limit: 50,000 characters.
+
+````markdown
+```mermaid
+flowchart LR
+  Browser --> Docs
+  Docs --> SQLite
+```
+````
+
+## Archify
+
 Use an `archify` fenced code block. Docs renders its JSON as an interactive SVG.
 The code icon edits the source, and the expand icon opens a larger preview.
 Drag to pan, pinch to zoom, or use the zoom/reset buttons. Keyboard: `+`, `-`, `0`

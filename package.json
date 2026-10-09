@@ -51,6 +51,7 @@
         "lowlight": "^3.3.0",
         "lucide-vue-next": "^1.0.0",
         "marked": "^18.0.11",
+        "mermaid": "12.1.0",
         "pinia": "^4.0.3",
         "reka-ui": "^2.10.5",
         "tailwind-merge": "^3.7.0",
