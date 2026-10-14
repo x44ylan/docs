@@ -1,6 +1,9 @@
 # Docs rewrite plan
 
-Status: approved, 2026-10-14. Nothing built yet.
+Status: built on branch `next`, 2026-10-15. All 20 end-to-end checks pass
+(`npm test`, report in `artifacts/e2e/report.json`). Migration dry run on a
+copy of live data matched exactly (824 nodes, 747 notes byte-identical, 127
+unique links, share token kept). Cutover not done yet.
 
 Goal: rebuild Docs on one TypeScript stack, then add live co-editing, version
 history, trash, note links, command menu, table of contents, in-note search,

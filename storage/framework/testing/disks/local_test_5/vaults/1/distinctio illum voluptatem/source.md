@@ -1,1 +1,0 @@
-See [x](/renamed.md) here.

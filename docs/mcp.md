@@ -17,6 +17,12 @@ suffix, returned with the updated `parent_id`. It uses your existing vault acces
 {"name":"move","arguments":{"noteId":42,"parentId":14}}
 ```
 
+`update` edits through the same live document as the browser, so anyone with
+the note open sees the change immediately. A version is saved before every agent
+edit, so it can be restored from History. `delete` moves a note and its
+sub-notes to the vault trash for 30 days. `backlinks` lists notes that link to a
+note.
+
 For Codex:
 
 ```sh

@@ -1,8 +1,6 @@
-.git
 node_modules
-vendor
-.env*
-.playwright-cli
+dist
 artifacts
 tests
-storage
+.git
+*.md
