@@ -1,12 +1,12 @@
 // One process: static client, JSON API, live sync, MCP and public share links.
-import { existsSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { serve } from '@hono/node-server';
 import { generateHTML } from '@tiptap/html/server';
 import { Hono } from 'hono';
 import { extensions, markdown } from '../shared/schema.ts';
 import { api, fileAt, sendFile } from './api.ts';
-import { get, HttpError } from './db.ts';
+import { dataDir, get, HttpError } from './db.ts';
 import { mcp } from './mcp.ts';
 import * as notes from './notes.ts';
 import { hocuspocus, snapshotAll, upgrade } from './sync.ts';
@@ -71,10 +71,20 @@ const mime: Record<string, string> = {
     js: 'text/javascript', css: 'text/css', svg: 'image/svg+xml', png: 'image/png', ico: 'image/x-icon',
     txt: 'text/plain; charset=utf-8', woff2: 'font/woff2', wasm: 'application/wasm', json: 'application/json',
 };
+// Tabs opened before a deploy still request the previous build's code files.
+// Each build's assets are kept in /data/assets (hashed names never collide),
+// so those tabs keep working instead of loading a blank page.
+const kept = join(dataDir, 'assets');
+mkdirSync(kept, { recursive: true });
+for (const name of readdirSync(join(dist, 'assets'))) {
+    if (!existsSync(join(kept, name))) copyFileSync(join(dist, 'assets', name), join(kept, name));
+}
 const file = (path: string) => {
     const name = basename(path);
     const asset = /\/assets\/([\w.-]+)$/.exec(path)?.[1];
-    const target = asset ? join(dist, 'assets', asset) : /^[\w.-]+\.(png|svg|ico|txt)$/.test(name) ? join(dist, name) : '';
+    const target = asset
+        ? [join(dist, 'assets', asset), join(kept, asset)].find(existsSync) ?? ''
+        : /^[\w.-]+\.(png|svg|ico|txt)$/.test(name) ? join(dist, name) : '';
     return target && existsSync(target) ? { target, immutable: !!asset && !/\.txt$/.test(name) } : undefined;
 };
 app.get('*', c => {
