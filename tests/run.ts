@@ -568,7 +568,8 @@ try {
         const saved = (await mcp('read', { noteId: main })).content as string;
         assert.match(saved, /^## Section two$/m);
         assert.match(saved, /\[Grand\]\(\/Labs\/Child\/Grand\.md\)/);
-        await page.getByRole('button', { name: 'Contents' }).click();
+        await page.getByRole('button', { name: 'More' }).click();
+        await page.getByRole('menuitem', { name: 'Contents' }).click();
         await page.getByRole('list', { name: 'Contents' }).getByRole('button', { name: 'Section two' }).waitFor();
         await page.keyboard.press('Escape');
         await page.keyboard.press('ControlOrMeta+f');
@@ -650,7 +651,7 @@ try {
                 await page.getByRole('region', { name: 'Vaults' }).waitFor();
                 await page.screenshot({ path: `${artifacts}/home-${width}-${theme}.png` });
                 // Home and note share one bar: same height, mark, search and account spots.
-                const spots = () => Promise.all(['#app-header', '#app-header a[aria-label="Docs home"]', '#app-header button[aria-label="Search"]', '#app-header button[aria-label="User menu"]'].map(s => page.locator(s).boundingBox()));
+                const spots = () => Promise.all(['#app-header', '#app-header a[aria-label="Docs home"]', '#app-header button[aria-label="More"]', '#app-header button[aria-label="User menu"]'].map(s => page.locator(s).boundingBox()));
                 const home = await spots();
                 await page.goto(`${base}/vaults/${vault.id}?file=${main}`);
                 await editorReady(page);

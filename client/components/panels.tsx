@@ -1,6 +1,6 @@
 // Dialogs and popovers used by the vault page: sharing, history, trash,
 // table of contents and in-note find.
-import { IconCopy, IconLink, IconLinkOff, IconRestore, IconTrash, IconX, IconChevronUp, IconChevronDown } from '@tabler/icons-react';
+import { IconLink, IconLinkOff, IconRestore, IconTrash, IconX, IconChevronUp, IconChevronDown } from '@tabler/icons-react';
 import type { Editor } from '@tiptap/react';
 import { diffLines } from 'diff';
 import { useEffect, useRef, useState } from 'react';
@@ -73,8 +73,7 @@ export function ShareDialog({ vaultId, open, onOpenChange }: { vaultId: number; 
                 </label>
                 {link ? (
                     <div className="flex items-center gap-1">
-                        <Input readOnly aria-label="Read-only link" value={link} onFocus={event => event.target.select()} className="text-xs" />
-                        <IconButton label="Copy link" onClick={async () => { await navigator.clipboard.writeText(link); toast.success('Link copied'); }}><IconCopy /></IconButton>
+                        <Input readOnly aria-label="Read-only link" title="Copy link" value={link} onClick={async event => { event.currentTarget.select(); await navigator.clipboard.writeText(link); toast.success('Link copied'); }} className="cursor-pointer text-xs" />
                         <IconButton label="Turn off link" onClick={() => void update({ link: false })}><IconLinkOff /></IconButton>
                     </div>
                 ) : (

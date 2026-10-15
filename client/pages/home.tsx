@@ -1,5 +1,5 @@
 // Home: vaults first, then pinned and recent notes.
-import { IconDots, IconDownload, IconFileText, IconFolder, IconPencil, IconPin, IconPlus, IconTrash, IconUpload, IconUsers, IconWorld } from '@tabler/icons-react';
+import { IconDots, IconDownload, IconFileText, IconFolder, IconPencil, IconPin, IconPlus, IconSearch, IconTrash, IconUpload, IconUsers, IconWorld } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, cache, cached, type Home as HomeData } from '../api.ts';
@@ -32,12 +32,15 @@ export function Home() {
             <Header
                 crumbs={[{ label: 'Docs' }]}
                 actions={
-                    <>
-                        <IconButton label="Import vault" onClick={() => upload.current?.click()}><IconUpload /></IconButton>
-                        <IconButton label="New vault" onClick={() => setDialog({ kind: 'new', name: '' })}><IconPlus /></IconButton>
-                    </>
+                    <Menu>
+                        <MenuTrigger asChild><IconButton label="More"><IconDots /></IconButton></MenuTrigger>
+                        <MenuContent className="w-52">
+                            <MenuItem onSelect={() => setSearching(true)}><IconSearch />Search</MenuItem>
+                            <MenuItem onSelect={() => setDialog({ kind: 'new', name: '' })}><IconPlus />New vault</MenuItem>
+                            <MenuItem onSelect={() => upload.current?.click()}><IconUpload />Import</MenuItem>
+                        </MenuContent>
+                    </Menu>
                 }
-                search={() => setSearching(true)}
                 account={<UserMenu user={data?.user} onRenamed={name => data && setData({ ...data, user: { ...data.user, name } })} />}
                 replace={searching ? <BarSearch label="Find a vault" value={filter} onChange={setFilter} onClose={() => { setFilter(''); setSearching(false); }} /> : undefined}
             />

@@ -59,12 +59,13 @@ export function Sidebar({ name, tree, pins, selected, main, actions }: { name: s
         <nav aria-label="Notes" className="flex h-full min-h-0 flex-col">
             <div className="flex h-12 shrink-0 items-center gap-1 pr-1 pl-3">
                 <h2 className="min-w-0 flex-1 truncate text-sm font-semibold" title={name}>{name}</h2>
-                <IconButton label="New note" onClick={() => actions.create(null, 'note')}><IconPlus /></IconButton>
-                <IconButton label="Share" onClick={actions.share}><IconShare /></IconButton>
                 <Menu>
                     <MenuTrigger asChild><IconButton label="Vault menu"><IconDots /></IconButton></MenuTrigger>
                     <MenuContent>
+                        <MenuItem onSelect={() => actions.create(null, 'note')}><IconPlus />New note</MenuItem>
                         <MenuItem onSelect={() => actions.create(null, 'folder')}><IconFolderPlus />New folder</MenuItem>
+                        <MenuItem onSelect={actions.share}><IconShare />Share</MenuItem>
+                        <MenuSeparator />
                         <MenuItem onSelect={actions.trash}><IconTrash />Trash</MenuItem>
                     </MenuContent>
                 </Menu>

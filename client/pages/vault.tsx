@@ -1,6 +1,6 @@
 // One vault, one page: switching notes swaps the editor without reloading.
 // Header: [home][tree] Vault / Parent / Note ··· toolbar ··· [actions][more] | [search][account]
-import { IconCopy, IconDots, IconEye, IconFilePlus, IconHistory, IconHome, IconLayoutSidebar, IconLink, IconListDetails, IconMoon, IconPencil, IconPin, IconPinnedOff, IconSearch, IconShare, IconSun, IconTrash, IconX } from '@tabler/icons-react';
+import { IconCopy, IconDots, IconEye, IconFilePlus, IconFileSearch, IconHistory, IconHome, IconLayoutSidebar, IconLink, IconListDetails, IconMoon, IconPencil, IconPin, IconPinnedOff, IconSearch, IconShare, IconSun, IconTrash, IconX } from '@tabler/icons-react';
 import type { Editor } from '@tiptap/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -234,17 +234,12 @@ export function VaultPage() {
             {(!online || !network) && <OfflineDot />}
             {!wide && editing && <IconButton label="Formatting" onClick={() => setTools(true)}><FormatIcon /></IconButton>}
             <IconButton label={editing ? 'Read' : 'Edit'} onClick={() => setMode(!editing)}>{editing ? <IconEye /> : <IconPencil />}</IconButton>
-            {wide && headings.length >= 2 && (
-                <Popover>
-                    <PopoverTrigger asChild><IconButton label="Contents"><IconListDetails /></IconButton></PopoverTrigger>
-                    <PopoverContent><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
-                </Popover>
-            )}
             <Menu>
                 <MenuTrigger asChild><IconButton label="More"><IconDots /></IconButton></MenuTrigger>
                 <MenuContent className="w-56">
-                    <MenuItem onSelect={() => setFinding(true)}><IconSearch />Find in note</MenuItem>
-                    {!wide && headings.length >= 2 && (
+                    <MenuItem onSelect={() => setPanel('palette')}><IconSearch />Search notes</MenuItem>
+                    <MenuItem onSelect={() => setFinding(true)}><IconFileSearch />Find in note</MenuItem>
+                    {headings.length >= 2 && (
                         <Popover>
                             <PopoverTrigger asChild><MenuItem onSelect={event => event.preventDefault()}><IconListDetails />Contents</MenuItem></PopoverTrigger>
                             <PopoverContent side="left"><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
@@ -252,6 +247,7 @@ export function VaultPage() {
                     )}
                     <MenuItem onSelect={() => void pin(note, !note.pinned)}>{note.pinned ? <IconPinnedOff /> : <IconPin />}{note.pinned ? 'Unpin' : 'Pin'}</MenuItem>
                     <MenuItem onSelect={() => setPanel('history')}><IconHistory />History</MenuItem>
+                    <MenuSeparator />
                     <MenuItem onSelect={() => void copyMarkdown()}><IconCopy />Copy as Markdown</MenuItem>
                     <MenuItem onSelect={async () => { await navigator.clipboard.writeText(`${location.origin}/vaults/${vaultId}?file=${note.id}`); toast.success('Link copied'); }}><IconLink />Copy link</MenuItem>
                     <MenuItem onSelect={() => create(note.id, 'note')}><IconFilePlus />New sub-note</MenuItem>
@@ -290,7 +286,6 @@ export function VaultPage() {
                 onTitle={wide ? undefined : () => setSidebar(s => !s)}
                 center={wide && note && editing ? <Toolbar editor={editor} /> : undefined}
                 actions={actions}
-                search={() => setPanel('palette')}
                 account={<UserMenu user={user} onRenamed={name => user && setUser({ ...user, name })} />}
                 replace={replace}
             />

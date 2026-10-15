@@ -1,5 +1,6 @@
 // One 56px top bar for every page, the same layout everywhere:
-//   [mark → home] [sidebar] Vault / Parent / Note   [centre]   [page actions] | [search] [account]
+//   [mark → home] [sidebar] Vault / Parent / Note   [centre]   [page actions] [⋯] [account]
+// Every page action lives in its ⋯ menu; only Read/Edit and formatting stay out.
 // Pages pass their own pieces; spacing, sizes and order stay identical.
 import { IconChevronDown, IconDots, IconMoon, IconPencil, IconSearch, IconSun, IconUser, IconX } from '@tabler/icons-react';
 import { Fragment, useState, type ReactNode } from 'react';
@@ -11,7 +12,7 @@ import { Button, cn, Dialog, IconButton, Input, Menu, MenuContent, MenuItem, Men
 // A step in the path. The last one is the current page.
 export type Crumb = { label: string; onClick?: () => void };
 
-export function Header({ brand, lead, crumbs, onTitle, center, actions, search, account, replace }: {
+export function Header({ brand, lead, crumbs, onTitle, center, actions, account, replace }: {
     // Public pages show the mark without linking home (visitors cannot sign in).
     brand?: ReactNode;
     lead?: ReactNode;
@@ -20,7 +21,6 @@ export function Header({ brand, lead, crumbs, onTitle, center, actions, search, 
     onTitle?: () => void;
     center?: ReactNode;
     actions?: ReactNode;
-    search?: () => void;
     account?: ReactNode;
     // Takes over the whole bar (find in note, search, phone formatting strip).
     replace?: ReactNode;
@@ -37,8 +37,6 @@ export function Header({ brand, lead, crumbs, onTitle, center, actions, search, 
                     {center && <div className="flex min-w-0 items-center">{center}</div>}
                     <div className="flex shrink-0 items-center justify-end gap-0.5 lg:flex-1">
                         {actions}
-                        {actions && (search || account) && <span className="mx-1 hidden h-5 w-px bg-border sm:block" aria-hidden="true" />}
-                        {search && <IconButton label="Search" onClick={search}><IconSearch /></IconButton>}
                         {account}
                     </div>
                 </>
