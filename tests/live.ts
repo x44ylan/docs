@@ -3,15 +3,32 @@
 // created in the first vault, edited live, then moved to trash.
 //   node tests/live.ts
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import WebSocket from 'ws';
 import * as Y from 'yjs';
 
 const origin = 'https://docs.x44ylan.com';
-const creds = JSON.parse(readFileSync(`${process.env.HOME}/.codex/.credentials.json`, 'utf8'));
-const token = Object.values<{ server_url: string; access_token: string }>(creds).find(c => c.server_url === `${origin}/mcp`)?.access_token;
-assert.ok(token, 'Sign in first: codex mcp login docs');
+type Credential = { server_url: string; issuer: string; client_id: string; access_token: string; refresh_token?: string; expires_at: number };
+const file = `${process.env.HOME}/.codex/.credentials.json`;
+const creds = JSON.parse(readFileSync(file, 'utf8')) as Record<string, Credential>;
+const entry = Object.entries(creds).find(([, c]) => c.server_url === `${origin}/mcp`);
+assert.ok(entry, 'Sign in first: codex mcp login docs');
+const [key, credential] = entry;
+// Access tokens last 15 minutes; refresh like Codex does and save the result.
+if (credential.expires_at < Date.now() + 60_000) {
+    assert.ok(credential.refresh_token, 'Token expired: codex mcp login docs');
+    const response = await fetch(`${credential.issuer}/cdn-cgi/access/oauth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: credential.refresh_token, client_id: credential.client_id }),
+    });
+    assert.equal(response.status, 200, `refresh failed: ${await response.clone().text()}`);
+    const fresh = await response.json() as { access_token: string; refresh_token?: string; expires_in: number };
+    creds[key] = { ...credential, access_token: fresh.access_token, refresh_token: fresh.refresh_token ?? credential.refresh_token, expires_at: Date.now() + fresh.expires_in * 1000 };
+    writeFileSync(file, JSON.stringify(creds), { mode: 0o600 });
+}
+const token = creds[key].access_token;
 const headers = { Authorization: `Bearer ${token}` };
 
 async function mcp(name: string, args: unknown) {
