@@ -30,7 +30,7 @@ export function Home() {
     return (
         <div className="flex h-dvh flex-col">
             <Header
-                title="Docs"
+                crumbs={[{ label: 'Docs' }]}
                 actions={
                     <>
                         <IconButton label="Import vault" onClick={() => upload.current?.click()}><IconUpload /></IconButton>

@@ -48,8 +48,7 @@ export function Share() {
             <Header
                 brand={<span className="inline-flex size-9 shrink-0 items-center justify-center"><DocIcon /></span>}
                 lead={<IconButton label="Toggle notes" className="max-sm:hidden" onClick={() => setSidebar(s => !s)}><IconLayoutSidebar /></IconButton>}
-                title={data?.note?.name ?? data?.name}
-                subtitle={data?.note && data.note.name !== data.name ? data.name : undefined}
+                crumbs={!data ? [] : data.note && data.note.name !== data.name ? [{ label: data.name }, { label: data.note.name }] : [{ label: data.name }]}
                 onTitle={innerWidth < 640 ? () => setSidebar(s => !s) : undefined}
             />
             <div className="flex min-h-0 flex-1">

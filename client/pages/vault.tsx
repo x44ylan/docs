@@ -1,5 +1,5 @@
 // One vault, one page: switching notes swaps the editor without reloading.
-// Header: [home][tree] path/title ··· toolbar ··· [actions][more] | [search][account]
+// Header: [home][tree] Vault / Parent / Note ··· toolbar ··· [actions][more] | [search][account]
 import { IconCopy, IconDots, IconEye, IconFilePlus, IconHistory, IconHome, IconLayoutSidebar, IconLink, IconListDetails, IconMoon, IconPencil, IconPin, IconPinnedOff, IconSearch, IconShare, IconSun, IconTrash, IconX } from '@tabler/icons-react';
 import type { Editor } from '@tiptap/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -7,7 +7,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { markdown } from '../../shared/schema.ts';
 import { api, cache, cached, type Note, type TreeNode, type User, type Vault } from '../api.ts';
-import { FormatIcon, Header, OfflineDot, UserMenu } from '../components/header.tsx';
+import { type Crumb, FormatIcon, Header, OfflineDot, UserMenu } from '../components/header.tsx';
 import { Palette } from '../components/palette.tsx';
 import { Contents, FindBar, headingsOf, HistoryDialog, ShareDialog, TrashDialog } from '../components/panels.tsx';
 import { Sidebar } from '../components/sidebar.tsx';
@@ -15,7 +15,7 @@ import { Toolbar } from '../components/toolbar.tsx';
 import { refreshAnchors } from '../editor/extensions.ts';
 import { NoteView, type Presence } from '../editor/note.tsx';
 import { watchVault } from '../editor/sync.ts';
-import { buildTree, isInside, pathOf, resolve } from '../tree.ts';
+import { ancestors, buildTree, isInside, pathOf, resolve } from '../tree.ts';
 import { title, useTheme } from '../theme.ts';
 import { Button, cn, Dialog, IconButton, Input, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Popover, PopoverContent, PopoverTrigger } from '../ui.tsx';
 
@@ -211,8 +211,14 @@ export function VaultPage() {
     }, [note]);
 
     const headings = headingsOf(editor);
-    const parents = note ? pathOf(tree, note.id).split('/').slice(1, -1) : [];
-    const showPath = note && note.id !== vault?.main && parents.length > 0;
+    // Vault / Parent / Note: the vault opens its main note, notes open, folders don't.
+    const crumbs: Crumb[] = !vault ? [] : !note || note.id === vault.main
+        ? [{ label: note?.name ?? vault.name }]
+        : [
+            { label: vault.name, onClick: vault.main ? () => open(vault.main!) : undefined },
+            ...ancestors(tree, note.id).slice(0, -1).filter(n => n.id !== vault.main).map(n => ({ label: n.name, onClick: n.kind === 'note' ? () => open(n.id) : undefined })),
+            { label: note.name },
+        ];
     const compactTools = !wide && tools && editing;
 
     // Page actions, most used first. Everything else lives in the More menu.
@@ -280,8 +286,7 @@ export function VaultPage() {
             <Header
                 // On phones the title opens the notes tree, so the toggle hides.
                 lead={<IconButton label="Toggle notes" aria-expanded={sidebar} className="max-sm:hidden" onClick={() => setSidebar(s => !s)}><IconLayoutSidebar /></IconButton>}
-                title={note?.name ?? vault?.name}
-                subtitle={showPath ? parents.join(' / ') : undefined}
+                crumbs={crumbs}
                 onTitle={wide ? undefined : () => setSidebar(s => !s)}
                 center={wide && note && editing ? <Toolbar editor={editor} /> : undefined}
                 actions={actions}

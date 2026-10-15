@@ -674,6 +674,32 @@ try {
         }
     });
 
+    await check('browser: breadcrumb walks back up: note, parent, vault, home', async () => {
+        const leaf = (await call('POST', `/vaults/${vault.id}/nodes`, { name: 'Leaf', parent_id: child.id })).data;
+        const { page, errors } = await open({ width: 1440, height: 900 }, alex);
+        await page.goto(`${base}/vaults/${vault.id}?file=${leaf.id}`);
+        await editorReady(page);
+        const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' });
+        // Editing puts the toolbar in the bar, so the middle folds into "…".
+        assert.equal((await crumbs.innerText()).replace(/\s+/g, ' ').trim(), 'Labs / / Leaf');
+        await crumbs.getByRole('button', { name: 'Show path' }).click();
+        await page.getByRole('menuitem', { name: 'Child' }).click();
+        await page.waitForURL(`**file=${child.id}`);
+        await crumbs.getByRole('button', { name: 'Labs' }).click();
+        await page.waitForURL(`**file=${main}`);
+        await page.waitForFunction(() => document.querySelector('nav[aria-label="Breadcrumb"]')?.textContent?.trim() === 'Labs');
+        await page.getByRole('link', { name: 'Docs home' }).click();
+        await page.getByRole('region', { name: 'Vaults' }).waitFor();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto(`${base}/vaults/${vault.id}?file=${leaf.id}`);
+        await editorReady(page);
+        await page.getByRole('button', { name: 'Leaf, show notes' }).click();
+        await page.getByRole('navigation', { name: 'Notes' }).getByText('Child').waitFor();
+        assert.deepEqual(errors, []);
+        await page.context().close();
+        await call('DELETE', `/vaults/${vault.id}/nodes/${leaf.id}`);
+    });
+
     await check('browser: progressive rendering on a 2,000-note vault and a 1 MB note', async () => {
         const big = (await call('POST', '/vaults', { name: 'Big' })).data;
         const bigMain = (await call('GET', `/vaults/${big.id}`)).data.main;

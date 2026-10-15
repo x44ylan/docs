@@ -1,26 +1,28 @@
 // One 56px top bar for every page, the same layout everywhere:
-//   [brand] [page lead: sidebar toggle, title]   [centre]   [page actions] | [search] [account]
+//   [mark → home] [sidebar] Vault / Parent / Note   [centre]   [page actions] | [search] [account]
 // Pages pass their own pieces; spacing, sizes and order stay identical.
-import { IconMoon, IconPencil, IconSearch, IconSun, IconUser, IconX } from '@tabler/icons-react';
-import { useState, type ReactNode } from 'react';
+import { IconChevronDown, IconDots, IconMoon, IconPencil, IconSearch, IconSun, IconUser, IconX } from '@tabler/icons-react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { api, type User } from '../api.ts';
 import { useTheme } from '../theme.ts';
-import { Button, Dialog, IconButton, Input, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../ui.tsx';
+import { Button, cn, Dialog, IconButton, Input, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '../ui.tsx';
 
-export function Header({ brand, lead, title, subtitle, onTitle, center, actions, search, account, replace }: {
+// A step in the path. The last one is the current page.
+export type Crumb = { label: string; onClick?: () => void };
+
+export function Header({ brand, lead, crumbs, onTitle, center, actions, search, account, replace }: {
     // Public pages show the mark without linking home (visitors cannot sign in).
     brand?: ReactNode;
     lead?: ReactNode;
-    title?: ReactNode;
-    subtitle?: ReactNode;
-    // Makes the title a button (opens the notes tree on narrow phones).
+    crumbs: Crumb[];
+    // On phones only the current page shows; tapping it opens the notes tree.
     onTitle?: () => void;
     center?: ReactNode;
     actions?: ReactNode;
     search?: () => void;
     account?: ReactNode;
-    // Takes over the whole bar (find in note, phone formatting strip).
+    // Takes over the whole bar (find in note, search, phone formatting strip).
     replace?: ReactNode;
 }) {
     return (
@@ -30,17 +32,7 @@ export function Header({ brand, lead, title, subtitle, onTitle, center, actions,
                     <div className="flex min-w-0 flex-1 items-center gap-0.5">
                         {brand ?? <HomeLink />}
                         {lead}
-                        {(title || subtitle) && (() => {
-                            const text = (
-                                <>
-                                    {subtitle && <span className="block w-full truncate text-[11px] text-muted-foreground">{subtitle}</span>}
-                                    {title && <span className="block w-full truncate text-sm font-medium">{title}</span>}
-                                </>
-                            );
-                            return onTitle
-                                ? <button type="button" onClick={onTitle} className="ml-1 flex min-w-0 flex-1 flex-col items-start justify-center overflow-hidden rounded-md px-1 py-0.5 text-left leading-tight outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">{text}</button>
-                                : <div className="ml-1 flex min-w-0 flex-col justify-center px-1 leading-tight">{text}</div>;
-                        })()}
+                        <Crumbs items={crumbs} onTitle={onTitle} tight={!!center} />
                     </div>
                     {center && <div className="flex min-w-0 items-center">{center}</div>}
                     <div className="flex shrink-0 items-center justify-end gap-0.5 lg:flex-1">
@@ -52,6 +44,50 @@ export function Header({ brand, lead, title, subtitle, onTitle, center, actions,
                 </>
             )}
         </header>
+    );
+}
+
+const step = 'h-8 min-w-0 truncate rounded-md px-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+// Vault / Parent / Note. Long paths fold the middle into "…" (all of it when the
+// toolbar shares the bar); phones show only the current page.
+function Crumbs({ items, onTitle, tight }: { items: Crumb[]; onTitle?: () => void; tight?: boolean }) {
+    const current = items.at(-1);
+    const parents = items.slice(0, -1);
+    const keep = tight ? 1 : 2;
+    const folded = parents.length > keep ? parents.slice(1, tight ? undefined : -1) : [];
+    const shown: (Crumb | null)[] = !folded.length ? parents : tight ? [parents[0], null] : [parents[0], null, parents.at(-1)!];
+    const slash = <span className="px-0.5 text-sm text-muted-foreground/50" aria-hidden="true">/</span>;
+    return (
+        <nav aria-label="Breadcrumb" className="ml-1 flex min-w-0 flex-1 items-center">
+            {shown.map((crumb, i) => (
+                <Fragment key={i}>
+                    <span className={cn("hidden min-w-0 items-center sm:flex", i === 0 ? "shrink-0" : "shrink")}>
+                        {crumb ? (
+                            crumb.onClick
+                                ? <button type="button" onClick={crumb.onClick} className={cn(step, 'max-w-40 text-muted-foreground hover:bg-accent hover:text-foreground')}>{crumb.label}</button>
+                                : <span className={cn(step, 'flex max-w-40 items-center text-muted-foreground')}>{crumb.label}</span>
+                        ) : (
+                            <Menu>
+                                <MenuTrigger asChild><IconButton label="Show path" className="size-8"><IconDots /></IconButton></MenuTrigger>
+                                <MenuContent align="start">
+                                    {folded.map((c, j) => <MenuItem key={j} disabled={!c.onClick} onSelect={c.onClick}>{c.label}</MenuItem>)}
+                                </MenuContent>
+                            </Menu>
+                        )}
+                    </span>
+                    <span className="hidden sm:inline">{slash}</span>
+                </Fragment>
+            ))}
+            {current && (onTitle
+                ? (
+                    <button type="button" onClick={onTitle} aria-label={`${current.label}, show notes`} className={cn(step, 'flex items-center gap-1 font-medium hover:bg-accent')}>
+                        <span className="truncate">{current.label}</span>
+                        <IconChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                    </button>
+                )
+                : <span aria-current="page" className={cn(step, 'flex items-center font-medium')}><span className="truncate">{current.label}</span></span>)}
+        </nav>
     );
 }
 
