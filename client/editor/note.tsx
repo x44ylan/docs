@@ -3,8 +3,9 @@
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { EditorContent, useEditor, type Editor } from '@tiptap/react';
-import { generateHTML } from '@tiptap/core';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { generateHTML, getSchema, type JSONContent } from '@tiptap/core';
+import { initProseMirrorDoc } from '@tiptap/y-tiptap';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { extensions as schemaExtensions, markdown } from '../../shared/schema.ts';
 import { api, type Note, type User } from '../api.ts';
@@ -97,11 +98,10 @@ function Live({ note, session, user, editable, links, file, openLink, linkExists
     const existsRef = useRef(linkExists);
     existsRef.current = linkExists;
 
-    const editor = useEditor({
-        editable,
-        immediatelyRender: true,
-        shouldRerenderOnTransaction: false,
-        extensions: [
+    // Build the document and its Yjs mapping once, with the editor's own
+    // schema; otherwise the binding re-renders the whole note on mount
+    // (about 2 s on a 1 MB note).
+    const extensions = useMemo(() => [
             ...editorExtensions({
                 file,
                 openLink: href => openRef.current(href),
@@ -118,7 +118,30 @@ function Live({ note, session, user, editable, links, file, openLink, linkExists
                     return { ...done, image: upload.type.startsWith('image/') };
                 },
             }),
-            Collaboration.configure({ document: session.doc, field: 'default' }),
+        ], [session]);
+    const initial = useMemo(() => {
+        const fragment = session.doc.getXmlFragment('default');
+        return fragment.length ? initProseMirrorDoc(fragment, getSchema(extensions)) : undefined;
+    }, [session, extensions]);
+    const editor = useEditor({
+        editable,
+        immediatelyRender: true,
+        shouldRerenderOnTransaction: false,
+        // Tiptap rebuilds node views on every read of `nodeViews`, so React's
+        // second `createNodeViews` call redraws the whole document. Read them
+        // once and reuse them (identical views, one render).
+        onBeforeCreate: ({ editor }) => {
+            const manager = (editor as unknown as { extensionManager: object }).extensionManager;
+            const nodeViews = (manager as { nodeViews: object }).nodeViews;
+            const markViews = (manager as { markViews: object }).markViews;
+            Object.defineProperty(manager, 'nodeViews', { value: nodeViews });
+            Object.defineProperty(manager, 'markViews', { value: markViews });
+        },
+        // A ProseMirror document (not JSON), so the mapping's nodes are reused.
+        content: initial?.doc as unknown as JSONContent | undefined,
+        extensions: [
+            ...extensions,
+            Collaboration.configure({ document: session.doc, field: 'default', ySyncOptions: initial ? { mapping: initial.mapping } : {} }),
             CollaborationCaret.configure({ provider: session.provider, user: { id: user.id, name: user.name, color: colorFor(user.id) } }),
         ],
         editorProps: { attributes: { spellcheck: 'true', 'aria-label': 'Note' } },
@@ -126,6 +149,15 @@ function Live({ note, session, user, editable, links, file, openLink, linkExists
 
     useEffect(() => { editor.setEditable(editable); }, [editor, editable]);
     useEffect(() => { onEditor(editor); return () => onEditor(null); }, [editor]);
+    // Leaving a note: detach and destroy the view first. Otherwise the editor
+    // re-renders and re-reads the whole document as React removes it (seconds
+    // on large notes).
+    useLayoutEffect(() => () => {
+        if (editor.isDestroyed) return;
+        (editor.view as unknown as { domObserver: { stop: () => void } }).domObserver.stop();
+        editor.view.dom.remove();
+        editor.destroy();
+    }, [editor]);
     useEffect(() => {
         const awareness = session.provider.awareness;
         if (!awareness) return;

@@ -492,7 +492,12 @@ export function editorExtensions(options: {
             item.run(editor);
         }, options.showCommands),
         suggestion<NoteLink>('noteLink', '[[', query => options.notes(query).slice(0, 8), (editor, range, item) => {
-            editor.chain().focus().deleteRange(range).insertContent({ type: 'text', text: item.name, marks: [{ type: 'link', attrs: { href: item.href } }] }).insertContent(' ').run();
+            // One step: replace `[[query` with the linked name and a space.
+            const { schema, tr } = editor.state;
+            const link = schema.text(item.name, [schema.marks.link.create({ href: item.href })]);
+            tr.replaceWith(range.from, range.to, [link, schema.text(' ')]);
+            editor.view.dispatch(tr.scrollIntoView());
+            editor.commands.focus();
         }, options.showLinks),
         Extension.create({
             name: 'internalLinks',
