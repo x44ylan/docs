@@ -9,6 +9,9 @@ Measured on a 2,000-note vault with a 1 MB note (`artifacts/e2e/timing.json`):
 first paint ~0.5 s, editable ~1.5 s, switching notes ~70 ms (from the 1 MB
 note ~80 ms).
 
+Old Laravel image and volumes are kept for rollback and removed automatically
+on 2026-10-29 by `docs-retire-laravel.timer` (an archive is kept in backups).
+
 Goal: rebuild Docs on one TypeScript stack, then add live co-editing, version
 history, trash, note links, command menu, table of contents, in-note search,
 pinned notes, copy as Markdown and progressive rendering. The current Laravel
