@@ -1,9 +1,13 @@
 # Docs rewrite plan
 
-Status: built on branch `next`, 2026-10-15. All 20 end-to-end checks pass
-(`npm test`, report in `artifacts/e2e/report.json`). Migration dry run on a
-copy of live data matched exactly (824 nodes, 747 notes byte-identical, 127
-unique links, share token kept). Cutover not done yet.
+Status: live since 2026-10-15 (commit ba90594). 31 end-to-end checks pass
+(`npm test`), plus a signed-in check through Cloudflare (`node tests/live.ts`).
+Cutover import matched exactly (824 nodes, 747 notes byte-identical, 127
+unique links, share token kept). Nightly backups run via `docs-backup.timer`.
+
+Open: a 1 MB note becomes editable ~2.5 s after its preview paints; the rest
+of the Progressive rendering targets are met (first paint ~0.5 s, note switch
+~80 ms).
 
 Goal: rebuild Docs on one TypeScript stack, then add live co-editing, version
 history, trash, note links, command menu, table of contents, in-note search,
