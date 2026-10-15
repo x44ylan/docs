@@ -507,6 +507,34 @@ try {
         await a.page.context().close(); await b.page.context().close();
     });
 
+    await check('browser: tree changes by others and agents appear live; offline edits sync on reconnect', async () => {
+        const { page, errors } = await open({ width: 1440, height: 900 });
+        await page.goto(`${base}/vaults/${vault.id}?file=${main}`);
+        await editorReady(page);
+        const tree = page.getByRole('navigation', { name: 'Notes' });
+        // Another person adds a note; an agent renames it.
+        const added = (await call('POST', `/vaults/${vault.id}/nodes`, { name: 'Live added' }, sam)).data;
+        await tree.locator('[data-node] button', { hasText: 'Live added' }).first().waitFor({ timeout: 5000 });
+        await mcp('move', { noteId: added.id, parentId: null });
+        await call('PATCH', `/vaults/${vault.id}/nodes/${added.id}`, { name: 'Live renamed' });
+        await tree.locator('[data-node] button', { hasText: 'Live renamed' }).first().waitFor({ timeout: 5000 });
+        // Go offline, type, come back: the edit is saved and the dot clears.
+        await page.locator('.note .ProseMirror').click();
+        await page.keyboard.press('ControlOrMeta+End');
+        await page.context().setOffline(true);
+        await page.evaluate(() => dispatchEvent(new Event('offline')));
+        await page.keyboard.type(' typed-offline');
+        await page.getByRole('status', { name: 'Offline' }).waitFor({ timeout: 15000 });
+        await page.context().setOffline(false);
+        await page.evaluate(() => dispatchEvent(new Event('online')));
+        await page.getByRole('status', { name: 'Offline' }).waitFor({ state: 'detached', timeout: 20000 });
+        await wait(2600);
+        assert.match((await mcp('read', { noteId: main })).content, /typed-offline/);
+        await call('DELETE', `/vaults/${vault.id}/nodes/${added.id}`);
+        assert.deepEqual(errors, []);
+        await page.context().close();
+    });
+
     await check('browser: / commands, [[ note links, find, contents, pin, copy as Markdown', async () => {
         const { page, errors } = await open({ width: 1440, height: 900 });
         await page.goto(`${base}/vaults/${vault.id}?file=${main}`);

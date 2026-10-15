@@ -51,6 +51,15 @@ export function VaultPage() {
     const [editor, setEditor] = useState<Editor | null>(null);
     const [people, setPeople] = useState<Presence>([]);
     const [online, setOnline] = useState(true);
+    // The socket notices a dead network only after a timeout; the browser
+    // reports it at once.
+    const [network, setNetwork] = useState(() => navigator.onLine);
+    useEffect(() => {
+        const update = () => setNetwork(navigator.onLine);
+        addEventListener('online', update);
+        addEventListener('offline', update);
+        return () => { removeEventListener('online', update); removeEventListener('offline', update); };
+    }, []);
     const [editing, setEditing] = useState(() => localStorage.getItem('mode') !== 'read');
     const [sidebar, setSidebar] = useState(() => matchMedia('(min-width: 1024px)').matches);
     const [tools, setTools] = useState(false);
@@ -229,7 +238,7 @@ export function VaultPage() {
                     ))}
                 </div>
             )}
-            {!online && <span className="mr-1 size-2 rounded-full bg-amber-500" title="Offline. Changes will sync when you reconnect." role="status" aria-label="Offline" />}
+            {(!online || !network) && <span className="mr-1 size-2 rounded-full bg-amber-500" title="Offline. Changes will sync when you reconnect." role="status" aria-label="Offline" />}
             {note && <IconButton label={editing ? 'Read' : 'Edit'} onClick={() => setMode(!editing)}>{editing ? <IconEye /> : <IconPencil />}</IconButton>}
             {note && !wide && editing && <IconButton label={tools ? 'Close formatting' : 'Formatting'} aria-pressed={tools} onClick={() => setTools(t => !t)}><IconTextCaption /></IconButton>}
             {wide && note && headings.length >= 2 && (
