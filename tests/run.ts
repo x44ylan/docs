@@ -3,7 +3,7 @@
 // writes artifacts/e2e/report.json plus screenshots.
 //   npm run build && node tests/run.ts [base URL of a running app]
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import { chromium, type Browser, type Page } from 'playwright';
@@ -420,6 +420,35 @@ try {
         const note = (await call('POST', `/vaults/${vault.id}/nodes`, { name: 'By Sam' }, sam)).data;
         assert.equal((await call('PATCH', `/vaults/${vault.id}/nodes/${note.id}`, { name: 'By Sam 2', parent_id: main }, sam)).status, 200);
         await call('DELETE', `/vaults/${vault.id}/nodes/${note.id}`, undefined, sam);
+    });
+
+    await check('backups: a backup restores into a working app with the same notes, links and attachments', async () => {
+        const dir = mkdtempSync('/tmp/docs-backups-');
+        const file = execFileSync('node', ['server/backup.ts', dir], { env: { ...process.env, DOCS_DATA: data }, encoding: 'utf8' }).trim();
+        const check = JSON.parse(execFileSync('node', ['server/backup.ts', '--check', file], { encoding: 'utf8' }));
+        assert.equal(check.integrity, 'ok');
+        // Restore into an empty data folder and start a second app on it.
+        const restored = mkdtempSync('/tmp/docs-restored-');
+        execFileSync('tar', ['-xzf', file, '-C', restored]);
+        const port2 = port + 20;
+        const second = spawn('node', ['server/main.ts'], { env: { ...process.env, ...env, DOCS_DATA: restored, PORT: String(port2) }, stdio: 'ignore' });
+        try {
+            const base2 = `http://127.0.0.1:${port2}`;
+            for (let i = 0; i < 100; i++) { try { if ((await fetch(`${base2}/up`)).ok) break; } catch { /* starting */ } await wait(100); }
+            const get = async (path: string, b = base) => (await fetch(`${b}/api${path}`, { headers: { 'cf-access-jwt-assertion': alex } })).json();
+            const [before, after] = [await get(`/vaults/${vault.id}`), await get(`/vaults/${vault.id}`, base2)];
+            assert.deepEqual(after.nodes.map((n: { id: number; name: string }) => [n.id, n.name]), before.nodes.map((n: { id: number; name: string }) => [n.id, n.name]));
+            for (const n of before.nodes.filter((n: { kind: string }) => n.kind === 'note')) {
+                const [a, b] = [await get(`/vaults/${vault.id}/nodes/${n.id}`), await get(`/vaults/${vault.id}/nodes/${n.id}`, base2)];
+                assert.equal(b.markdown, a.markdown, `note ${n.name}`);
+                assert.deepEqual(b.backlinks, a.backlinks);
+            }
+            const shot = before.nodes.find((n: { kind: string }) => n.kind === 'file');
+            if (shot) assert.equal((await fetch(`${base2}/api/vaults/${vault.id}/files?path=/${encodeURIComponent(`Labs/${shot.name}.${shot.ext}`)}`, { headers: { 'cf-access-jwt-assertion': alex } })).status, 200);
+            assert.equal(readFileSync(`${restored}/files/${vault.id}/Labs.md`, 'utf8'), (await get(`/vaults/${vault.id}/nodes/${main}`)).markdown);
+        } finally {
+            second.kill('SIGKILL');
+        }
     });
 
     await check('memory: idle documents are unloaded once their editors leave', async () => {

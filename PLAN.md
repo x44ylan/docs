@@ -1,6 +1,6 @@
 # Docs rewrite plan
 
-Status: live since 2026-10-15. 31 end-to-end checks pass (`npm test`), plus a
+Status: live since 2026-10-15. 32 end-to-end checks pass (`npm test`), plus a
 signed-in check through Cloudflare (`node tests/live.ts`). Cutover import
 matched exactly (824 nodes, 747 notes byte-identical, 127 unique links, share
 token kept). Nightly backups run via `docs-backup.timer`.
