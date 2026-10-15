@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { devices, webkit } from 'playwright';
 
 const [base = 'http://127.0.0.1:3000', credential = ''] = process.argv.slice(2);
-const headers = credential.startsWith('ey') && credential.split('.').length === 3 && !base.startsWith('https')
+const headers: Record<string, string> = credential.startsWith('ey') && credential.split('.').length === 3 && !base.startsWith('https')
     ? { 'cf-access-jwt-assertion': credential }
     : { Authorization: `Bearer ${credential}` };
 const browser = await webkit.launch();

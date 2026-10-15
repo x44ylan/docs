@@ -1,9 +1,9 @@
-// Home: vaults first, then pinned and recent notes. Search | import | new vault.
-import { IconDots, IconDownload, IconFileText, IconFolder, IconPencil, IconPin, IconPlus, IconSearch, IconTrash, IconUpload, IconUsers, IconWorld } from '@tabler/icons-react';
+// Home: vaults first, then pinned and recent notes.
+import { IconDots, IconDownload, IconFileText, IconFolder, IconPencil, IconPin, IconPlus, IconTrash, IconUpload, IconUsers, IconWorld } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { api, cache, cached, type Home as HomeData } from '../api.ts';
-import { Header, HomeLink, UserMenu } from '../components/header.tsx';
+import { BarSearch, Header, UserMenu } from '../components/header.tsx';
 import { title } from '../theme.ts';
 import { Button, Dialog, IconButton, Input, Menu, MenuContent, MenuItem, MenuTrigger } from '../ui.tsx';
 
@@ -30,29 +30,16 @@ export function Home() {
     return (
         <div className="flex h-dvh flex-col">
             <Header
-                left={<HomeLink />}
-                right={
+                title="Docs"
+                actions={
                     <>
-                        {searching ? (
-                            <Input
-                                autoFocus
-                                type="search"
-                                aria-label="Find a vault"
-                                placeholder="Find a vault"
-                                className="w-40 sm:w-56"
-                                value={filter}
-                                onChange={event => setFilter(event.target.value)}
-                                onBlur={() => !filter && setSearching(false)}
-                                onKeyDown={event => event.key === 'Escape' && (setFilter(''), setSearching(false))}
-                            />
-                        ) : (
-                            <IconButton label="Find a vault" onClick={() => setSearching(true)}><IconSearch /></IconButton>
-                        )}
                         <IconButton label="Import vault" onClick={() => upload.current?.click()}><IconUpload /></IconButton>
                         <IconButton label="New vault" onClick={() => setDialog({ kind: 'new', name: '' })}><IconPlus /></IconButton>
-                        <UserMenu user={data?.user} onRenamed={name => data && setData({ ...data, user: { ...data.user, name } })} />
                     </>
                 }
+                search={() => setSearching(true)}
+                account={<UserMenu user={data?.user} onRenamed={name => data && setData({ ...data, user: { ...data.user, name } })} />}
+                replace={searching ? <BarSearch label="Find a vault" value={filter} onChange={setFilter} onClose={() => { setFilter(''); setSearching(false); }} /> : undefined}
             />
             <input ref={upload} type="file" accept=".zip" hidden onChange={event => event.target.files?.[0] && void importZip(event.target.files[0])} />
             <main className="min-h-0 flex-1 overflow-y-auto">

@@ -46,17 +46,15 @@ export function Share() {
     return (
         <div className="flex h-dvh flex-col">
             <Header
-                left={
-                    <>
-                        <span className="inline-flex size-9 items-center justify-center"><DocIcon /></span>
-                        <IconButton label="Toggle notes" onClick={() => setSidebar(s => !s)}><IconLayoutSidebar /></IconButton>
-                        <span className="truncate pl-1 text-[15px] font-medium">{data?.note?.name ?? data?.name}</span>
-                    </>
-                }
+                brand={<span className="inline-flex size-9 shrink-0 items-center justify-center"><DocIcon /></span>}
+                lead={<IconButton label="Toggle notes" className="max-sm:hidden" onClick={() => setSidebar(s => !s)}><IconLayoutSidebar /></IconButton>}
+                title={data?.note?.name ?? data?.name}
+                subtitle={data?.note && data.note.name !== data.name ? data.name : undefined}
+                onTitle={innerWidth < 640 ? () => setSidebar(s => !s) : undefined}
             />
             <div className="flex min-h-0 flex-1">
                 {sidebar && data && (
-                    <aside className="w-64 shrink-0 overflow-y-auto border-r bg-popover p-2 max-lg:absolute max-lg:inset-y-[60px] max-lg:left-0 max-lg:z-30 max-lg:w-[80%] max-lg:max-w-[300px]">
+                    <aside className="w-64 shrink-0 overflow-y-auto border-r bg-popover p-2 max-lg:absolute max-lg:top-14 max-lg:bottom-0 max-lg:left-0 max-lg:z-30 max-lg:w-[80%] max-lg:max-w-[300px]">
                         <Branch tree={tree} parent={null} depth={0} selected={data.note?.id} open={id => { setParams({ file: String(id) }); if (innerWidth < 1024) setSidebar(false); }} />
                     </aside>
                 )}

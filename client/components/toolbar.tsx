@@ -25,7 +25,8 @@ const tools: (Tool | null)[] = [
     { label: 'Redo', icon: <IconArrowForwardUp />, run: e => e.chain().focus().redo().run() },
 ];
 
-export function Toolbar({ editor }: { editor: Editor | null }) {
+// `bare`: no frame, for the phone strip that fills the whole bar.
+export function Toolbar({ editor, bare }: { editor: Editor | null; bare?: boolean }) {
     const [, tick] = useState(0);
     useEffect(() => {
         if (!editor) return;
@@ -34,14 +35,14 @@ export function Toolbar({ editor }: { editor: Editor | null }) {
         return () => { editor.off('transaction', update); };
     }, [editor]);
     return (
-        <div role="toolbar" aria-label="Formatting" className="scrollbar-none flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto rounded-lg border border-border/50 bg-muted/25 p-0.5">
+        <div role="toolbar" aria-label="Formatting" className={`scrollbar-none flex max-w-full min-w-0 items-center gap-0.5 overflow-x-auto ${bare ? '' : 'rounded-lg border border-border/50 bg-muted/25 p-0.5'}`}>
             {tools.map((tool, i) => tool ? (
                 <IconButton
                     key={tool.label}
                     label={tool.label}
                     disabled={!editor}
                     aria-pressed={editor && tool.active ? tool.active(editor) : undefined}
-                    className="size-8 aria-pressed:bg-accent"
+                    className={bare ? 'aria-pressed:bg-accent' : 'size-8 aria-pressed:bg-accent'}
                     onMouseDown={event => event.preventDefault()}
                     onClick={() => editor && tool.run(editor)}
                 >

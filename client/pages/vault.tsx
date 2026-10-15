@@ -1,13 +1,13 @@
 // One vault, one page: switching notes swaps the editor without reloading.
-// Header: [home][tree] path/title ··· toolbar ··· [mode][contents][find][more][account]
-import { IconCopy, IconDots, IconEye, IconFilePlus, IconHistory, IconHome, IconLayoutSidebar, IconLink, IconListDetails, IconMoon, IconPencil, IconPin, IconPinnedOff, IconSearch, IconShare, IconSun, IconTextCaption, IconTrash } from '@tabler/icons-react';
+// Header: [home][tree] path/title ··· toolbar ··· [actions][more] | [search][account]
+import { IconCopy, IconDots, IconEye, IconFilePlus, IconHistory, IconHome, IconLayoutSidebar, IconLink, IconListDetails, IconMoon, IconPencil, IconPin, IconPinnedOff, IconSearch, IconShare, IconSun, IconTrash, IconX } from '@tabler/icons-react';
 import type { Editor } from '@tiptap/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { markdown } from '../../shared/schema.ts';
 import { api, cache, cached, type Note, type TreeNode, type User, type Vault } from '../api.ts';
-import { Header, HomeLink, UserMenu } from '../components/header.tsx';
+import { FormatIcon, Header, OfflineDot, UserMenu } from '../components/header.tsx';
 import { Palette } from '../components/palette.tsx';
 import { Contents, FindBar, headingsOf, HistoryDialog, ShareDialog, TrashDialog } from '../components/panels.tsx';
 import { Sidebar } from '../components/sidebar.tsx';
@@ -215,21 +215,8 @@ export function VaultPage() {
     const showPath = note && note.id !== vault?.main && parents.length > 0;
     const compactTools = !wide && tools && editing;
 
-    const left = (
-        <>
-            {(wide || !compactTools) && wide && <HomeLink />}
-            {!compactTools && <IconButton label="Toggle notes" aria-expanded={sidebar} onClick={() => setSidebar(s => !s)}><IconLayoutSidebar /></IconButton>}
-            {!compactTools && !finding && (
-                <div className="flex min-w-0 flex-1 flex-col justify-center pl-1" title={note ? pathOf(tree, note.id) : vault?.name}>
-                    {showPath && <span className="truncate text-[11px] leading-4 text-muted-foreground">{parents.join(' / ')}</span>}
-                    <span className="truncate text-[15px] leading-5 font-medium">{note?.name ?? vault?.name ?? ''}</span>
-                </div>
-            )}
-            {finding && <FindBar editor={editor} onClose={() => setFinding(false)} />}
-            {compactTools && <Toolbar editor={editor} />}
-        </>
-    );
-    const right = !finding && (
+    // Page actions, most used first. Everything else lives in the More menu.
+    const actions = note && (
         <>
             {!!people.length && (
                 <div className="mr-1 hidden -space-x-1.5 sm:flex" aria-label={`Also here: ${people.map(p => p.name).join(', ')}`}>
@@ -238,53 +225,70 @@ export function VaultPage() {
                     ))}
                 </div>
             )}
-            {(!online || !network) && <span className="mr-1 size-2 rounded-full bg-amber-500" title="Offline. Changes will sync when you reconnect." role="status" aria-label="Offline" />}
-            {note && <IconButton label={editing ? 'Read' : 'Edit'} onClick={() => setMode(!editing)}>{editing ? <IconEye /> : <IconPencil />}</IconButton>}
-            {note && !wide && editing && <IconButton label={tools ? 'Close formatting' : 'Formatting'} aria-pressed={tools} onClick={() => setTools(t => !t)}><IconTextCaption /></IconButton>}
-            {wide && note && headings.length >= 2 && (
+            {(!online || !network) && <OfflineDot />}
+            {!wide && editing && <IconButton label="Formatting" onClick={() => setTools(true)}><FormatIcon /></IconButton>}
+            <IconButton label={editing ? 'Read' : 'Edit'} onClick={() => setMode(!editing)}>{editing ? <IconEye /> : <IconPencil />}</IconButton>
+            {wide && headings.length >= 2 && (
                 <Popover>
                     <PopoverTrigger asChild><IconButton label="Contents"><IconListDetails /></IconButton></PopoverTrigger>
                     <PopoverContent><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
                 </Popover>
             )}
-            {!compactTools && <IconButton label="Search" onClick={() => setPanel('palette')}><IconSearch /></IconButton>}
-            {!compactTools && note && (
-                <Menu>
-                    <MenuTrigger asChild><IconButton label="More"><IconDots /></IconButton></MenuTrigger>
-                    <MenuContent className="w-56">
-                        <MenuItem onSelect={() => setFinding(true)}><IconSearch />Find in note</MenuItem>
-                        {!wide && headings.length >= 2 && (
-                            <Popover>
-                                <PopoverTrigger asChild><MenuItem onSelect={event => event.preventDefault()}><IconListDetails />Contents</MenuItem></PopoverTrigger>
-                                <PopoverContent side="left"><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
-                            </Popover>
-                        )}
-                        <MenuItem onSelect={() => void pin(note, !note.pinned)}>{note.pinned ? <IconPinnedOff /> : <IconPin />}{note.pinned ? 'Unpin' : 'Pin'}</MenuItem>
-                        <MenuItem onSelect={() => setPanel('history')}><IconHistory />History</MenuItem>
-                        <MenuItem onSelect={() => void copyMarkdown()}><IconCopy />Copy as Markdown</MenuItem>
-                        <MenuItem onSelect={async () => { await navigator.clipboard.writeText(`${location.origin}/vaults/${vaultId}?file=${note.id}`); toast.success('Link copied'); }}><IconLink />Copy link</MenuItem>
-                        <MenuItem onSelect={() => create(note.id, 'note')}><IconFilePlus />New sub-note</MenuItem>
-                        {!!note.backlinks.length && (
-                            <>
-                                <MenuSeparator />
-                                <div className="px-2 pt-1 pb-0.5 text-xs text-muted-foreground">Linked from</div>
-                                {note.backlinks.map(link => <MenuItem key={link.id} onSelect={() => open(link.id)}><IconLink />{link.name}</MenuItem>)}
-                            </>
-                        )}
-                        <MenuSeparator />
-                        <MenuItem onSelect={toggleTheme}>{dark ? <IconSun /> : <IconMoon />}{dark ? 'Light mode' : 'Dark mode'}</MenuItem>
-                        <MenuItem destructive onSelect={() => void remove(note)}><IconTrash />Delete</MenuItem>
-                    </MenuContent>
-                </Menu>
-            )}
-            {wide && <UserMenu user={user} onRenamed={name => user && setUser({ ...user, name })} />}
-            {!wide && !compactTools && <HomeLink />}
+            <Menu>
+                <MenuTrigger asChild><IconButton label="More"><IconDots /></IconButton></MenuTrigger>
+                <MenuContent className="w-56">
+                    <MenuItem onSelect={() => setFinding(true)}><IconSearch />Find in note</MenuItem>
+                    {!wide && headings.length >= 2 && (
+                        <Popover>
+                            <PopoverTrigger asChild><MenuItem onSelect={event => event.preventDefault()}><IconListDetails />Contents</MenuItem></PopoverTrigger>
+                            <PopoverContent side="left"><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
+                        </Popover>
+                    )}
+                    <MenuItem onSelect={() => void pin(note, !note.pinned)}>{note.pinned ? <IconPinnedOff /> : <IconPin />}{note.pinned ? 'Unpin' : 'Pin'}</MenuItem>
+                    <MenuItem onSelect={() => setPanel('history')}><IconHistory />History</MenuItem>
+                    <MenuItem onSelect={() => void copyMarkdown()}><IconCopy />Copy as Markdown</MenuItem>
+                    <MenuItem onSelect={async () => { await navigator.clipboard.writeText(`${location.origin}/vaults/${vaultId}?file=${note.id}`); toast.success('Link copied'); }}><IconLink />Copy link</MenuItem>
+                    <MenuItem onSelect={() => create(note.id, 'note')}><IconFilePlus />New sub-note</MenuItem>
+                    {!!note.backlinks.length && (
+                        <>
+                            <MenuSeparator />
+                            <div className="px-2 pt-1 pb-0.5 text-xs text-muted-foreground">Linked from</div>
+                            {note.backlinks.map(link => <MenuItem key={link.id} onSelect={() => open(link.id)}><IconLink />{link.name}</MenuItem>)}
+                        </>
+                    )}
+                    <MenuSeparator />
+                    <MenuItem destructive onSelect={() => void remove(note)}><IconTrash />Delete</MenuItem>
+                </MenuContent>
+            </Menu>
         </>
     );
+    // Find and the phone formatting strip take over the whole bar, with a
+    // close button in the same place as the account button.
+    const replace = finding
+        ? <FindBar editor={editor} onClose={() => setFinding(false)} />
+        : compactTools
+            ? (
+                <div className="flex min-w-0 flex-1 items-center gap-1">
+                    <div className="min-w-0 flex-1"><Toolbar editor={editor} bare /></div>
+                    <IconButton label="Close formatting" onClick={() => setTools(false)}><IconX /></IconButton>
+                </div>
+            )
+            : undefined;
 
     return (
         <div className="flex h-dvh flex-col">
-            <Header left={left} center={wide && note && editing ? <Toolbar editor={editor} /> : undefined} right={right} />
+            <Header
+                // On phones the title opens the notes tree, so the toggle hides.
+                lead={<IconButton label="Toggle notes" aria-expanded={sidebar} className="max-sm:hidden" onClick={() => setSidebar(s => !s)}><IconLayoutSidebar /></IconButton>}
+                title={note?.name ?? vault?.name}
+                subtitle={showPath ? parents.join(' / ') : undefined}
+                onTitle={wide ? undefined : () => setSidebar(s => !s)}
+                center={wide && note && editing ? <Toolbar editor={editor} /> : undefined}
+                actions={actions}
+                search={() => setPanel('palette')}
+                account={<UserMenu user={user} onRenamed={name => user && setUser({ ...user, name })} />}
+                replace={replace}
+            />
             <div className="relative flex min-h-0 flex-1">
                 {!wide && sidebar && <div className="fixed inset-0 z-20 bg-background/60" onClick={() => setSidebar(false)} />}
                 <aside

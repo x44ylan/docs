@@ -649,10 +649,14 @@ try {
                 await page.goto(base);
                 await page.getByRole('region', { name: 'Vaults' }).waitFor();
                 await page.screenshot({ path: `${artifacts}/home-${width}-${theme}.png` });
+                // Home and note share one bar: same height, mark, search and account spots.
+                const spots = () => Promise.all(['#app-header', '#app-header a[aria-label="Docs home"]', '#app-header button[aria-label="Search"]', '#app-header button[aria-label="User menu"]'].map(s => page.locator(s).boundingBox()));
+                const home = await spots();
                 await page.goto(`${base}/vaults/${vault.id}?file=${main}`);
                 await editorReady(page);
-                const header = await page.locator('#app-header').boundingBox();
-                assert.equal(header?.height, 60);
+                const note = await spots();
+                assert.equal(note[0]?.height, 56);
+                assert.deepEqual(note, home);
                 const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
                 assert.equal(overflow, false, `horizontal overflow at ${width}`);
                 const buttons = await page.locator('#app-header button, #app-header a').evaluateAll(els => els.filter(e => (e as HTMLElement).offsetWidth).map(e => { const r = e.getBoundingClientRect(); return [r.width, r.right]; }));

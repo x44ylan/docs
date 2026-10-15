@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { slug } from '../../shared/schema.ts';
 import { api, type User } from '../api.ts';
 import { findKey } from '../editor/extensions.ts';
+import { BarSearch } from './header.tsx';
 import { Button, cn, Dialog, IconButton, Input } from '../ui.tsx';
 
 // --- Sharing ---------------------------------------------------------------
@@ -223,24 +224,17 @@ export function FindBar({ editor, onClose }: { editor: Editor | null; onClose: (
     useEffect(() => { input.current?.focus(); return () => { editor?.view.dispatch(editor.state.tr.setMeta(findKey, { query: '' })); }; }, [editor]);
     const step = (delta: number) => count && set({ index: ((state?.index ?? 0) + delta + count) % count });
     return (
-        <div role="search" className="flex h-[60px] min-w-0 flex-1 items-center gap-1">
-            <input
-                ref={input}
-                type="search"
-                aria-label="Find in note"
-                placeholder="Find"
-                value={query}
-                onChange={event => { setQuery(event.target.value); set({ query: event.target.value, index: 0 }); }}
-                onKeyDown={event => {
-                    if (event.key === 'Enter') { event.preventDefault(); step(event.shiftKey ? -1 : 1); }
-                    if (event.key === 'Escape') onClose();
-                }}
-                className="h-9 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground sm:text-sm"
-            />
-            <span className="shrink-0 text-xs text-muted-foreground tabular-nums" aria-live="polite">{query ? `${count ? (state?.index ?? 0) + 1 : 0}/${count}` : ''}</span>
+        <BarSearch
+            label="Find in note"
+            inputRef={input}
+            value={query}
+            onChange={value => { setQuery(value); set({ query: value, index: 0 }); }}
+            onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); step(event.shiftKey ? -1 : 1); } }}
+            onClose={onClose}
+        >
+            <span className="shrink-0 px-1 text-xs text-muted-foreground tabular-nums" aria-live="polite">{query ? `${count ? (state?.index ?? 0) + 1 : 0}/${count}` : ''}</span>
             <IconButton label="Previous match" disabled={!count} onClick={() => step(-1)}><IconChevronUp /></IconButton>
             <IconButton label="Next match" disabled={!count} onClick={() => step(1)}><IconChevronDown /></IconButton>
-            <IconButton label="Close find" onClick={onClose}><IconX /></IconButton>
-        </div>
+        </BarSearch>
     );
 }
