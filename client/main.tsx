@@ -48,7 +48,9 @@ const router = createBrowserRouter([
 ]);
 
 // Start fetching the editor while the user is still on home.
-requestIdleCallback?.(() => void import('./pages/vault.tsx'));
+// Safari has no requestIdleCallback (a bare reference throws), so fall back.
+const idle = (globalThis as { requestIdleCallback?: (fn: () => void) => void }).requestIdleCallback ?? ((fn: () => void) => setTimeout(fn, 1500));
+idle(() => void import('./pages/vault.tsx').catch(() => undefined));
 
 function App() {
     const { dark } = useTheme();

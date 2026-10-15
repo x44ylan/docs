@@ -9,6 +9,7 @@ export default defineConfig({
     publicDir: '../public',
     plugins: [react(), tailwind()],
     resolve: { alias: { '@': new URL('./client', import.meta.url).pathname } },
-    build: { outDir: '../dist', emptyOutDir: true, chunkSizeWarningLimit: 6000 },
+    // Safari 16.4+ (iPhones from 2023 on) as well as current Chrome/Firefox.
+    build: { outDir: '../dist', emptyOutDir: true, chunkSizeWarningLimit: 6000, target: ['es2022', 'safari16.4'] },
     server: { proxy: { '/api': 'http://127.0.0.1:3000', '/mcp': 'http://127.0.0.1:3000', '/sync': { target: 'ws://127.0.0.1:3000', ws: true } } },
 });
