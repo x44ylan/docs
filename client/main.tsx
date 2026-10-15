@@ -3,8 +3,19 @@ import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import { Toaster } from 'sonner';
 import './app.css';
+import { prefetch } from './api.ts';
 import { Home } from './pages/home.tsx';
 import { useTheme } from './theme.ts';
+
+// Opening a vault directly: fetch its tree and note while the editor code loads.
+{
+    const match = /^\/vaults\/(\d+)\/?$/.exec(location.pathname);
+    const file = new URLSearchParams(location.search).get('file');
+    if (match && file && /^\d+$/.test(file)) {
+        prefetch(`/vaults/${match[1]}`);
+        prefetch(`/vaults/${match[1]}/nodes/${file}`);
+    } else if (match) prefetch(`/vaults/${match[1]}?open`);
+}
 
 // Home paints from the small entry bundle; the editor and share page load on demand.
 const VaultPage = lazy(() => import('./pages/vault.tsx').then(m => ({ default: m.VaultPage })));

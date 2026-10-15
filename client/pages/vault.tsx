@@ -12,6 +12,7 @@ import { Palette } from '../components/palette.tsx';
 import { Contents, FindBar, headingsOf, HistoryDialog, ShareDialog, TrashDialog } from '../components/panels.tsx';
 import { Sidebar } from '../components/sidebar.tsx';
 import { Toolbar } from '../components/toolbar.tsx';
+import { refreshAnchors } from '../editor/extensions.ts';
 import { NoteView, type Presence } from '../editor/note.tsx';
 import { watchVault } from '../editor/sync.ts';
 import { buildTree, isInside, pathOf, resolve } from '../tree.ts';
@@ -60,10 +61,16 @@ export function VaultPage() {
     const main = useRef<HTMLElement>(null);
 
     const fileId = Number(params.get('file')) || null;
+    const firstLoad = useRef(true);
+    const fresh = useRef<number | null>(null);
     const tree = useMemo(() => buildTree(vault?.nodes ?? []), [vault]);
 
     const loadVault = useCallback(async () => {
-        const next = await api<Vault>(`/vaults/${vaultId}`);
+        const next = await api<Vault & { open?: Note; user: User }>(`/vaults/${vaultId}${firstLoad.current && !fileId ? '?open' : ''}`);
+        firstLoad.current = false;
+        if (next.open) { remember(next.open); fresh.current = next.open.id; }
+        setUser(current => (current?.id === next.user.id && current.name === next.user.name ? current : next.user));
+        cache('user', next.user);
         setVault(next);
         cache(`vault:${vaultId}`, next);
         return next;
@@ -73,7 +80,6 @@ export function VaultPage() {
         void loadVault().then(next => {
             if (!fileId && next.main) setParams({ file: String(next.main) }, { replace: true });
         }).catch(() => navigate('/', { replace: true }));
-        if (!user) void api<{ user: User }>('/home').then(home => { setUser(home.user); cache('user', home.user); });
         return watchVault(vaultId, () => void loadVault());
     }, [vaultId]);
 
@@ -84,6 +90,8 @@ export function VaultPage() {
         let alive = true;
         const hit = recent.get(fileId);
         if (hit) { setNote(hit); main.current?.scrollTo(0, 0); }
+        // Fresh from the vault response (`?open`): no second request.
+        if (hit && fresh.current === fileId) { fresh.current = null; return; }
         void api<Note>(`/vaults/${vaultId}/nodes/${fileId}`, { quiet: true })
             .then(next => {
                 remember(next);
@@ -100,6 +108,8 @@ export function VaultPage() {
         if (note && vault && !current) setParams({}, { replace: true });
     }, [tree]);
     useEffect(() => { title(note?.name ?? vault?.name); }, [note?.name, vault?.name]);
+    // Re-check vault links when the tree changes (a note was moved or deleted).
+    useEffect(() => { if (editor && !editor.isDestroyed) refreshAnchors(editor); }, [tree, editor]);
     useEffect(() => {
         if (!editor) return;
         const update = () => refreshHeadings(n => n + 1);
@@ -128,6 +138,9 @@ export function VaultPage() {
         return true;
     };
     const fileUrl = (href: string) => `/api/vaults/${vaultId}/files?from=${note?.id ?? ''}&path=${encodeURIComponent(href)}`;
+    // Only vault-relative `.md` links can be broken; web links are not checked.
+    const linkExists = (href: string) =>
+        note && !/^[a-z][a-z0-9+.-]*:|^\/\/|^#/i.test(href) && /\.md(#|$)/i.test(href) ? !!resolve(tree, note.id, href) : undefined;
     const noteLinks = (query: string) => {
         const q = query.toLowerCase();
         return [...tree.nodes.values()]
@@ -295,6 +308,7 @@ export function VaultPage() {
                                 links={noteLinks}
                                 file={fileUrl}
                                 openLink={openLink}
+                                linkExists={linkExists}
                                 onEditor={setEditor}
                                 onPresence={setPeople}
                                 onStatus={setOnline}

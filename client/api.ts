@@ -10,6 +10,12 @@ export class ApiError extends Error {
 }
 
 export async function api<T = unknown>(path: string, init: { method?: string; body?: unknown; form?: FormData; quiet?: boolean } = {}): Promise<T> {
+    // A GET started early (see `prefetch`) is reused once.
+    const early = !init.method && !init.body && !init.form ? prefetched.get(path) : undefined;
+    if (early) {
+        prefetched.delete(path);
+        return early.then(r => r as T, () => api<T>(path, init));
+    }
     const response = await fetch(`/api${path}`, {
         method: init.method ?? (init.body || init.form ? 'POST' : 'GET'),
         headers: init.form ? undefined : { 'Content-Type': 'application/json' },
@@ -29,6 +35,17 @@ export async function api<T = unknown>(path: string, init: { method?: string; bo
         throw error;
     }
     return data as T;
+}
+
+const prefetched = new Map<string, Promise<unknown>>();
+// Start GETs before the page that needs them has loaded its code.
+export function prefetch(path: string) {
+    if (!prefetched.has(path)) {
+        const request = api(path, { quiet: true });
+        request.catch(() => undefined);
+        prefetched.set(path, request);
+        setTimeout(() => prefetched.delete(path), 10_000);
+    }
 }
 
 export type User = { id: number; email: string; name: string };

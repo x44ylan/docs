@@ -1,13 +1,14 @@
 // Browser-only editor behaviour layered on the shared schema: code block
 // previews, `/` commands, `[[` note links, in-note find and heading anchors.
 // None of these change what is stored.
-import { Extension, type Editor, type Range } from '@tiptap/core';
+import { Extension, Node as TiptapNode, type AnyExtension, type Editor, type Range } from '@tiptap/core';
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
+import Heading from '@tiptap/extension-heading';
 import Image from '@tiptap/extension-image';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import Suggestion, { type SuggestionProps } from '@tiptap/suggestion';
-import { extensions as shared, slug } from '../../shared/schema.ts';
+import { extensions as shared, slug, starterKit } from '../../shared/schema.ts';
 import { createLazyLowlight } from './lowlight.ts';
 import { preview } from './preview.ts';
 
@@ -227,6 +228,7 @@ export const commands: Command[] = [
     { title: 'Archify diagram', keywords: 'architecture json diagram', run: e => e.chain().focus().insertContent({ type: 'codeBlock', attrs: { language: 'archify' }, content: [{ type: 'text', text: '{\n  "diagram_type": "architecture",\n  "components": [\n    { "id": "app", "label": "App", "pos": [40, 40] }\n  ]\n}' }] }).run() },
     { title: 'HTML preview', keywords: 'html iframe', run: e => e.chain().focus().insertContent({ type: 'codeBlock', attrs: { language: 'html' }, content: [{ type: 'text', text: '<p>Hello</p>' }] }).run() },
     { title: 'Link to note', keywords: 'link page note [[', run: e => e.chain().focus().insertContent('[[').run() },
+    { title: 'Image or file', keywords: 'image picture photo upload attachment file', run: e => void (e.storage as unknown as { uploads: { pick: () => Promise<void> } }).uploads.pick() },
 ];
 
 export type NoteLink = { id: number; name: string; path: string; href: string };
@@ -272,34 +274,89 @@ const Find = Extension.create({
     },
 });
 
-// Stable heading anchors for the table of contents and `#heading` links.
-// Set as DOM ids after each change (cheap), not as a decoration set rebuilt
-// over the whole document on every keystroke.
-export function headingIds(root: ParentNode) {
-    const seen = new Map<string, number>();
-    for (const heading of root.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')) {
-        const base = slug(heading.textContent ?? '') || 'section';
-        const n = seen.get(base) ?? 0;
-        seen.set(base, n + 1);
-        const id = n ? `${base}-${n}` : base;
-        if (heading.id !== id) heading.id = id;
-    }
+// Broken-link styling as decorations, so ProseMirror owns the DOM. Rebuilt
+// only when links may have changed; plain typing just maps the set.
+function linkDecorations(doc: import('@tiptap/pm/model').Node, exists: (href: string) => boolean | undefined) {
+    const decorations: Decoration[] = [];
+    doc.descendants((node, pos) => {
+        if (!node.isText) return;
+        const link = node.marks.find(mark => mark.type.name === 'link');
+        if (link && exists(String(link.attrs.href ?? '')) === false) {
+            decorations.push(Decoration.inline(pos, pos + node.nodeSize, { class: 'broken-link', title: 'This note no longer exists' }));
+        }
+    });
+    return DecorationSet.create(doc, decorations);
 }
-const Anchors = Extension.create({
+const anchorsKey = new PluginKey<DecorationSet>('anchors');
+const Anchors = (exists: (href: string) => boolean | undefined) => Extension.create({
     name: 'anchors',
     addProseMirrorPlugins() {
-        let frame = 0;
         return [
             new Plugin({
+                key: anchorsKey,
+                state: {
+                    init: (_, state) => linkDecorations(state.doc, exists),
+                    apply(tr, value, _old, state) {
+                        if (!tr.docChanged && !tr.getMeta(anchorsKey)) return value;
+                        // Typing plain text never adds, removes or retargets a link.
+                        const linksMayChange = tr.getMeta(anchorsKey) || tr.steps.some(step => {
+                            const json = step.toJSON() as { stepType?: string; slice?: { content?: { type?: string; marks?: unknown[] }[] } };
+                            return json.stepType !== 'replace' || (json.slice?.content ?? []).some(n => n.type !== 'text' || n.marks?.length);
+                        });
+                        return linksMayChange ? linkDecorations(state.doc, exists) : value.map(tr.mapping, tr.doc);
+                    },
+                },
+                props: { decorations: state => anchorsKey.getState(state) },
+                // Duplicate heading ids get `-1`, `-2` (rare; most notes have none).
                 view: view => {
-                    const update = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => headingIds(view.dom)); };
-                    update();
-                    return { update: (v, prev) => { if (!prev.doc.eq(v.state.doc)) update(); }, destroy: () => cancelAnimationFrame(frame) };
+                    let frame = 0;
+                    const dedupe = () => {
+                        cancelAnimationFrame(frame);
+                        frame = requestAnimationFrame(() => {
+                            const seen = new Map<string, number>();
+                            for (const heading of view.dom.querySelectorAll<HTMLElement>(':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6')) {
+                                const base = heading.dataset.anchor ?? heading.id;
+                                const n = seen.get(base) ?? 0;
+                                seen.set(base, n + 1);
+                                const id = n ? `${base}-${n}` : base;
+                                if (heading.id !== id) { heading.dataset.anchor = base; heading.id = id; }
+                            }
+                        });
+                    };
+                    dedupe();
+                    return { update: (v, prev) => { if (!prev.doc.eq(v.state.doc)) dedupe(); }, destroy: () => cancelAnimationFrame(frame) };
                 },
             }),
         ];
     },
 });
+// Headings render their anchor id from their own text (no decoration set).
+// A node view updates it in place when the text changes.
+const AnchoredHeading = Heading.extend({
+    addNodeView() {
+        return ({ node }) => {
+            const dom = document.createElement(`h${node.attrs.level}`);
+            dom.id = slug(node.textContent) || 'section';
+            let current = node;
+            return {
+                dom,
+                contentDOM: dom,
+                update(updated) {
+                    if (updated.type !== current.type || updated.attrs.level !== current.attrs.level) return false;
+                    if (updated.textContent !== current.textContent) {
+                        delete dom.dataset.anchor;
+                        dom.id = slug(updated.textContent) || 'section';
+                    }
+                    current = updated;
+                    return true;
+                },
+                ignoreMutation: mutation => mutation.type === 'attributes',
+            };
+        };
+    },
+});
+// Re-check links after the tree changes (e.g. a note was deleted).
+export const refreshAnchors = (editor: Editor) => editor.view.dispatch(editor.state.tr.setMeta(anchorsKey, true));
 
 // Copying a selection also places Markdown on the clipboard as plain text.
 const CopyMarkdown = (toMarkdown: (editor: Editor) => string) =>
@@ -326,6 +383,85 @@ const CopyMarkdown = (toMarkdown: (editor: Editor) => string) =>
         },
     });
 
+// Pasted or dropped files upload next to the note; images are inserted as
+// images, other files as links. Text pastes are left to the editor.
+export const pickFile = (accept = '') =>
+    new Promise<File[]>(resolve => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.accept = accept;
+        input.onchange = () => resolve([...(input.files ?? [])]);
+        input.click();
+    });
+
+export async function insertFiles(editor: Editor, files: File[], upload: (file: File) => Promise<{ src: string; name: string; image: boolean }>, at?: number) {
+    for (const file of files) {
+        const done = await upload(file).catch(() => undefined);
+        if (!done) continue;
+        const content = done.image
+            ? { type: 'image', attrs: { src: done.src, alt: done.name } }
+            : { type: 'text', text: done.name, marks: [{ type: 'link', attrs: { href: done.src } }] };
+        const chain = editor.chain().focus();
+        (at !== undefined ? chain.insertContentAt(at, content) : chain.insertContent(content)).insertContent(' ').run();
+        at = undefined;
+    }
+}
+
+const Uploads = (upload: (file: File) => Promise<{ src: string; name: string; image: boolean }>) =>
+    Extension.create<unknown, { pick: () => Promise<void> }>({
+        name: 'uploads',
+        addStorage() {
+            return { pick: async () => {} };
+        },
+        onCreate() {
+            this.storage.pick = async () => insertFiles(this.editor, await pickFile(), upload);
+        },
+        addProseMirrorPlugins() {
+            const editor = this.editor;
+            return [
+                new Plugin({
+                    props: {
+                        handlePaste(_view, event) {
+                            const files = [...(event.clipboardData?.files ?? [])];
+                            if (!files.length || !editor.isEditable) return false;
+                            void insertFiles(editor, files, upload);
+                            return true;
+                        },
+                        handleDrop(view, event) {
+                            const files = [...(event.dataTransfer?.files ?? [])];
+                            if (!files.length || !editor.isEditable) return false;
+                            const at = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+                            void insertFiles(editor, files, upload, at);
+                            return true;
+                        },
+                    },
+                }),
+            ];
+        },
+    });
+
+// Table editing re-checks every changed block for broken tables on each
+// transaction (over a second when a large note first syncs). Notes without a
+// table skip it; with tables it runs as before.
+const LightTable = (table: AnyExtension) =>
+    (table as TiptapNode).extend({
+        addProseMirrorPlugins() {
+            return (this.parent?.() ?? []).map(plugin => {
+                const append = plugin.spec.appendTransaction;
+                if (!append) return plugin;
+                return new Plugin({
+                    ...plugin.spec,
+                    appendTransaction(trs, oldState, state) {
+                        let hasTable = false;
+                        state.doc.forEach(node => { if (node.type.name === 'table') hasTable = true; });
+                        return hasTable ? append.call(plugin, trs, oldState, state) : null;
+                    },
+                });
+            });
+        },
+    });
+
 export function editorExtensions(options: {
     file: (href: string) => string;
     openLink: (href: string) => boolean;
@@ -334,14 +470,20 @@ export function editorExtensions(options: {
     showCommands: (state: MenuState<Command>) => void;
     showLinks: (state: MenuState<NoteLink>) => void;
     rehighlight: () => void;
+    upload: (file: File) => Promise<{ src: string; name: string; image: boolean }>;
+    exists: (href: string) => boolean | undefined;
 }) {
     return [
-        ...shared.filter(e => !['codeBlock', 'image'].includes(e.name)),
+        ...shared.filter(e => !['codeBlock', 'image', 'starterKit', 'table'].includes(e.name)),
+        LightTable(shared.find(e => e.name === 'table')!),
+        starterKit({ heading: false }),
+        AnchoredHeading,
         codeBlock(options.rehighlight),
         image(options.file),
         Find,
-        Anchors,
+        Anchors(options.exists),
         CopyMarkdown(options.selectionMarkdown),
+        Uploads(options.upload),
         suggestion<Command>('slash', '/', query => {
             const q = query.toLowerCase();
             return commands.filter(c => !q || `${c.title} ${c.keywords}`.toLowerCase().includes(q)).slice(0, 12);

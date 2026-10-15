@@ -4,7 +4,7 @@
 //   npm run build && node tests/run.ts [base URL of a running app]
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
 import { chromium, type Browser, type Page } from 'playwright';
 import WebSocket from 'ws';
@@ -16,10 +16,21 @@ mkdirSync(artifacts, { recursive: true });
 const data = mkdtempSync('/tmp/docs-e2e-');
 const port = 3990 + Math.floor(Math.random() * 9);
 const base = `http://127.0.0.1:${port}`;
-const server = spawn('node', ['server/main.ts'], { env: { ...process.env, ...env, DOCS_DATA: data, PORT: String(port), APP_URL: base }, stdio: ['ignore', 'ignore', 'pipe'] });
 const serverLog: string[] = [];
-server.stderr.on('data', chunk => serverLog.push(String(chunk)));
-for (let i = 0; i < 100; i++) { try { if ((await fetch(`${base}/up`)).ok) break; } catch { /* starting */ } await new Promise(r => setTimeout(r, 100)); }
+// The server can be restarted mid-run (persistence and reconnect checks).
+let server!: ReturnType<typeof spawn>;
+async function start() {
+    server = spawn('node', ['server/main.ts'], { env: { ...process.env, ...env, DOCS_DATA: data, PORT: String(port), APP_URL: base }, stdio: ['ignore', 'ignore', 'pipe'] });
+    server.stderr!.on('data', chunk => serverLog.push(String(chunk)));
+    for (let i = 0; i < 100; i++) { try { if ((await fetch(`${base}/up`)).ok) return; } catch { /* starting */ } await new Promise(r => setTimeout(r, 100)); }
+    throw new Error('server did not start');
+}
+async function stop(signal: NodeJS.Signals = 'SIGTERM') {
+    const exited = new Promise(resolve => server.once('exit', resolve));
+    server.kill(signal);
+    await exited;
+}
+await start();
 
 const alex = await token('alex@example.test', { name: 'Alex' });
 const sam = await token('sam@example.test', { name: 'Sam' });
@@ -256,6 +267,175 @@ try {
         assert.ok(copy.nodes.some((n: { name: string; parent_id: number }) => n.name === 'Child' && n.parent_id === labs.id));
     });
 
+    // --- Failure cases ----------------------------------------------------
+    await check('markdown: front matter, HTML, escapes, hashtags and angle links survive a round trip', async () => {
+        const text = [
+            '---', 'title: Plan', 'tags: [a, b]', '---', '',
+            '# Heading', '', '<div>raw html</div> & ATT&CK snake_case \\*not em\\* #tag <https://example.test>', '',
+            '| a | b |', '| --- | --- |', '| 1 | 2 |', '', '- [ ] todo', '- [x] done', '',
+            '```mermaid', 'graph TD', '  A --> B', '```', '',
+        ].join('\n');
+        const note = await mcp('create', { vaultId: vault.id, name: 'Fidelity', content: text });
+        const once = (await mcp('read', { noteId: note.id })).content;
+        assert.match(once, /^---\ntitle: Plan\ntags: \[a, b\]\n---\n/);
+        // Open it live, then make an unrelated edit: everything else is kept.
+        const a = live(`note:${note.id}`);
+        await a.synced;
+        await mcp('update', { noteId: note.id, content: '\n\ntail\n' });
+        await wait(2600);
+        const saved = (await mcp('read', { noteId: note.id })).content;
+        assert.equal(saved, `${once.replace(/\n$/, '')}\n\ntail\n`);
+        for (const piece of ['<div>raw html</div>', 'ATT&CK', 'snake_case', '\\*not em\\*', '#tag', 'https://example.test', '| 1 | 2 |', '- [x] done', '```mermaid']) {
+            assert.ok(saved.includes(piece), `lost ${piece}\n${saved}`);
+        }
+        a.close();
+        await mcp('delete', { noteId: note.id });
+    });
+
+    await check('co-editing: an editor that disconnects mid-edit merges its offline changes on reconnect', async () => {
+        const note = await mcp('create', { vaultId: vault.id, name: 'Offline', content: 'shared\n' });
+        const a = live(`note:${note.id}`);
+        const b = live(`note:${note.id}`);
+        await Promise.all([a.synced, b.synced]);
+        a.provider.disconnect();
+        const text = (doc: Y.Doc) => ((doc.getXmlFragment('default').get(0) as Y.XmlElement).get(0) as Y.XmlText);
+        text(a.doc).insert(0, 'offline-a ');
+        text(b.doc).insert(0, 'online-b ');
+        await wait(500);
+        await a.provider.connect();
+        await wait(2800);
+        const saved = (await mcp('read', { noteId: note.id })).content;
+        assert.ok(saved.includes('offline-a') && saved.includes('online-b') && saved.includes('shared'), saved);
+        a.close(); b.close();
+    });
+
+    await check('co-editing: edits survive a server restart; open editors reconnect and keep syncing', async () => {
+        const note = await mcp('create', { vaultId: vault.id, name: 'Restart', content: 'before\n' });
+        const a = live(`note:${note.id}`);
+        await a.synced;
+        const p = (a.doc.getXmlFragment('default').get(0) as Y.XmlElement).get(0) as Y.XmlText;
+        p.insert(0, 'typed ');
+        await wait(300);
+        await stop('SIGTERM');
+        await start();
+        assert.match((await mcp('read', { noteId: note.id })).content, /typed before/);
+        // The open editor reconnects on its own and its next edit is saved.
+        await new Promise<void>((resolve, reject) => { a.provider.on('synced', () => resolve()); setTimeout(() => reject(new Error('no reconnect')), 15000); });
+        p.insert(0, 'again ');
+        await wait(2800);
+        assert.match((await mcp('read', { noteId: note.id })).content, /again typed before/);
+        a.close();
+    });
+
+    await check('storage: a crash loses no committed edit and the Markdown mirror is rebuilt on start', async () => {
+        const note = await mcp('create', { vaultId: vault.id, name: 'Crash', content: 'kept\n' });
+        const file = `${data}/files/${vault.id}/Crash.md`;
+        writeFileSync(file, 'tampered');
+        rmSync(`${data}/files/${vault.id}/Labs.md`);
+        await stop('SIGKILL');
+        await start();
+        assert.equal(readFileSync(file, 'utf8'), 'kept\n');
+        assert.equal(readFileSync(`${data}/files/${vault.id}/Labs.md`, 'utf8'), (await mcp('read', { noteId: main })).content);
+        await mcp('delete', { noteId: note.id });
+    });
+
+    await check('storage: a failed mirror write never fails the edit', async () => {
+        const note = await mcp('create', { vaultId: vault.id, name: 'Readonly', content: 'one\n' });
+        const dir = `${data}/files/${vault.id}`;
+        chmodSync(dir, 0o500);
+        try {
+            const after = await mcp('update', { noteId: note.id, content: '\n\ntwo\n' });
+            assert.equal(after.content, 'one\n\ntwo\n');
+        } finally {
+            chmodSync(dir, 0o700);
+        }
+        await mcp('delete', { noteId: note.id });
+    });
+
+    await check('links: a note in another vault, in trash, or open elsewhere is handled on rename', async () => {
+        const other = (await call('POST', '/vaults', { name: 'Elsewhere' })).data;
+        const otherMain = (await call('GET', `/vaults/${other.id}`)).data.main;
+        await mcp('update', { noteId: otherMain, operation: 'replace', content: 'Cross [x](/Labs/Child.md)\n' });
+        const target = await mcp('create', { vaultId: vault.id, name: 'Target', content: '' });
+        const trashed = await mcp('create', { vaultId: vault.id, name: 'Gone', content: 'see [t](/Target.md)\n' });
+        await mcp('delete', { noteId: trashed.id });
+        await call('PATCH', `/vaults/${vault.id}/nodes/${target.id}`, { name: 'Target2' });
+        // Other vaults never resolve into this one, so they are untouched.
+        assert.equal((await mcp('read', { noteId: otherMain })).content, 'Cross [x](/Labs/Child.md)\n');
+        // A note in trash keeps its text; after restore the link shows as broken.
+        await call('POST', `/vaults/${vault.id}/trash/${trashed.id}`);
+        assert.equal((await mcp('read', { noteId: trashed.id })).content, 'see [t](/Target.md)\n');
+        assert.deepEqual(await mcp('backlinks', { noteId: target.id }), []);
+        await mcp('delete', { noteId: trashed.id });
+        await mcp('delete', { noteId: target.id });
+    });
+
+    await check('history: retention keeps every pre-agent version; trash empties after 30 days', async () => {
+        const note = await mcp('create', { vaultId: vault.id, name: 'Old', content: 'v1\n' });
+        await mcp('update', { noteId: note.id, operation: 'replace', content: 'v2\n' });
+        await mcp('update', { noteId: note.id, operation: 'replace', content: 'v3\n' });
+        const doomed = await mcp('create', { vaultId: vault.id, name: 'Doomed', content: 'x\n' });
+        await mcp('delete', { noteId: doomed.id });
+        await stop();
+        const { DatabaseSync } = await import('node:sqlite');
+        const db = new DatabaseSync(`${data}/db.sqlite`);
+        db.prepare(`update versions set created_at = datetime('now', '-200 days') where node_id = ?`).run(note.id);
+        db.prepare(`update nodes set deleted_at = datetime('now', '-31 days') where id = ?`).run(doomed.id);
+        db.close();
+        await start();
+        const versions = (await call('GET', `/vaults/${vault.id}/nodes/${note.id}/versions`)).data;
+        const bodies = await Promise.all(versions.map(async (v: { id: number }) => (await call('GET', `/vaults/${vault.id}/nodes/${note.id}/versions/${v.id}`)).data.markdown));
+        assert.ok(bodies.includes('v1\n') && bodies.includes('v2\n'), JSON.stringify(bodies));
+        assert.ok(!(await call('GET', `/vaults/${vault.id}/trash`)).data.some((t: { id: number }) => t.id === doomed.id));
+        await mcp('delete', { noteId: note.id });
+    });
+
+    await check('auth: a changed email is a new account with no access; a member keeps access after rename', async () => {
+        const renamed = await token('alex.new@example.test', { sub: 'alex@example.test' });
+        assert.equal((await call('GET', `/vaults/${vault.id}`, undefined, renamed)).status, 404);
+        assert.equal((await call('PATCH', '/me', { name: 'Alexandra' })).status, 200);
+        assert.equal((await call('GET', `/vaults/${vault.id}`)).status, 200);
+        await call('PATCH', '/me', { name: 'Alex' });
+    });
+
+    await check('sharing: public links never expose trash, history, files of other vaults or MCP', async () => {
+        const shared = (await call('PATCH', `/vaults/${vault.id}/share`, { link: true })).data.share_token;
+        const hidden = await mcp('create', { vaultId: vault.id, name: 'Hidden', content: 'secret\n' });
+        await mcp('delete', { noteId: hidden.id });
+        const body = await (await fetch(`${base}/share/${shared}`, { headers: { accept: 'application/json' } })).json();
+        assert.ok(!body.nodes.some((n: { id: number }) => n.id === hidden.id));
+        assert.equal((await (await fetch(`${base}/share/${shared}?file=${hidden.id}`, { headers: { accept: 'application/json' } })).json()).note, null);
+        for (const path of [`/api/vaults/${vault.id}/trash`, `/api/vaults/${vault.id}/nodes/${main}/versions`, '/mcp']) {
+            assert.notEqual((await fetch(`${base}${path}`)).status, 200, path);
+        }
+        assert.equal((await fetch(`${base}/share/${shared}/files?path=../../db.sqlite`)).status, 404);
+        await call('PATCH', `/vaults/${vault.id}/share`, { link: false });
+    });
+
+    await check('tree: moving across vaults is refused; a member can rename and move', async () => {
+        const other = (await call('POST', '/vaults', { name: 'Across' })).data;
+        const otherMain = (await call('GET', `/vaults/${other.id}`)).data.main;
+        assert.equal((await call('PATCH', `/vaults/${vault.id}/nodes/${child.id}`, { parent_id: otherMain })).status, 404);
+        await call('POST', `/vaults/${vault.id}/members`, { email: 'sam@example.test' });
+        const note = (await call('POST', `/vaults/${vault.id}/nodes`, { name: 'By Sam' }, sam)).data;
+        assert.equal((await call('PATCH', `/vaults/${vault.id}/nodes/${note.id}`, { name: 'By Sam 2', parent_id: main }, sam)).status, 200);
+        await call('DELETE', `/vaults/${vault.id}/nodes/${note.id}`, undefined, sam);
+    });
+
+    await check('memory: idle documents are unloaded once their editors leave', async () => {
+        const notes = await Promise.all([1, 2, 3].map(i => mcp('create', { vaultId: vault.id, name: `Idle ${i}`, content: `${i}\n` })));
+        const sessions = notes.map(n => live(`note:${n.id}`));
+        await Promise.all(sessions.map(s => s.synced));
+        const loaded = async () => (await (await fetch(`${base}/up?documents`)).text()).split(' ').slice(1);
+        const before = await loaded();
+        assert.ok(notes.every(n => before.includes(`note:${n.id}`)), before.join());
+        sessions.forEach(s => s.close());
+        await wait(3000);
+        const after = await loaded();
+        assert.ok(notes.every(n => !after.includes(`note:${n.id}`)), after.join());
+        for (const n of notes) await mcp('delete', { noteId: n.id });
+    });
+
     // --- Browser ----------------------------------------------------------
     browser = await chromium.launch();
     const open = async (viewport: { width: number; height: number }, who = alex, theme: 'light' | 'dark' = 'light') => {
@@ -271,7 +451,7 @@ try {
         page.on('pageerror', e => errors.push(e.message));
         return { page, errors };
     };
-    const editorReady = (page: Page) => page.locator('.note .ProseMirror[contenteditable="true"]').waitFor({ timeout: 10_000 });
+    const editorReady = (page: Page, timeout = 10_000) => page.locator('.note .ProseMirror[contenteditable="true"]').waitFor({ timeout });
 
     await check('browser: two people see each other typing, with named cursors', async () => {
         await call('POST', `/vaults/${vault.id}/members`, { email: 'sam@example.test' });
@@ -386,12 +566,12 @@ try {
         await page.getByRole('img', { name: 'Diagram' }).waitFor();
         await page.getByRole('button', { name: 'Preview html' }).click();
         await page.frameLocator('iframe[title="HTML preview"]').locator('b', { hasText: 'hi' }).waitFor();
-        await page.getByRole('button', { name: 'Read' }).click();
+        await page.getByRole('button', { name: 'Read', exact: true }).click();
         assert.equal(await page.getByRole('toolbar', { name: 'Formatting' }).count(), 0);
         assert.equal(await page.locator('.note .ProseMirror').getAttribute('contenteditable'), 'false');
         await page.screenshot({ path: `${artifacts}/previews-1440.png` });
         await page.reload();
-        await page.getByRole('button', { name: 'Edit' }).waitFor();
+        await page.getByRole('button', { name: 'Edit', exact: true }).waitFor();
         assert.deepEqual(errors, []);
         await page.context().close();
     });
@@ -428,16 +608,33 @@ try {
         const big = (await call('POST', '/vaults', { name: 'Big' })).data;
         const bigMain = (await call('GET', `/vaults/${big.id}`)).data.main;
         for (let i = 0; i < 2000; i += 1) await call('POST', `/vaults/${big.id}/nodes`, { name: `Note ${i}`, parent_id: i % 2 ? bigMain : null });
-        const body = Array.from({ length: 4000 }, (_, i) => `## Part ${i}\n\nLine ${i} with **bold** text and a [link](https://example.test/${i}).`).join('\n\n');
-        await mcp('update', { noteId: bigMain, operation: 'replace', content: body.slice(0, 990_000) });
+        const body = Array.from({ length: 12_000 }, (_, i) => `## Part ${i}\n\nLine ${i} with **bold** text and a [link](https://example.test/${i}).`).join('\n\n');
+        const content = body.slice(0, body.lastIndexOf('\n\n', 990_000)) + '\n';
+        assert.ok(content.length > 950_000, `fixture is ${content.length} bytes`);
+        await mcp('update', { noteId: bigMain, operation: 'replace', content });
         const { page, errors } = await open({ width: 1440, height: 900 });
+        // Measure inside the page: locator polling would compete for the main thread.
+        await page.context().addInitScript(() => {
+            const w = window as unknown as { fp?: number; live?: number };
+            new MutationObserver((_, o) => {
+                if (!w.fp && document.querySelector('.note .ProseMirror')) w.fp = Math.round(performance.now());
+                if (!w.live && document.querySelector('.note .ProseMirror[contenteditable="true"]')) { w.live = Math.round(performance.now()); o.disconnect(); }
+            }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['contenteditable'] });
+        });
         await page.goto(`${base}/vaults/${big.id}`);
-        const started = Date.now();
+        // First open right after an agent rewrote the note (cold): must be quick.
+        await page.waitForFunction(() => (window as unknown as { live?: number }).live, undefined, { polling: 500, timeout: 30_000 });
+        const coldLive = await page.evaluate(() => (window as unknown as { live: number }).live);
+        assert.ok(coldLive < 6000, `cold open of a 1 MB note took ${coldLive}ms`);
         await page.reload();
-        await page.locator('.note .ProseMirror').first().waitFor();
-        const firstPaint = Date.now() - started;
-        await editorReady(page);
-        const liveAt = Date.now() - started;
+        await page.waitForFunction(() => (window as unknown as { fp?: number }).fp, undefined, { polling: 500, timeout: 20_000 });
+        const firstPaint = await page.evaluate(() => (window as unknown as { fp: number }).fp);
+        // A 1 MB note is ~24,000 blocks: the readable preview shows first,
+        // the editable view follows.
+        await page.waitForFunction(() => (window as unknown as { live?: number }).live, undefined, { polling: 500, timeout: 20_000 });
+        const liveAt = await page.evaluate(() => (window as unknown as { live: number }).live);
+        // Opening a note never edits it (no version, no save).
+        assert.equal((await call('GET', `/vaults/${big.id}/nodes/${bigMain}/versions`)).data.filter((v: { source: string }) => v.source === 'web').length <= 1, true);
         const rows = await page.locator('[role="treeitem"]').count();
         assert.ok(rows < 200, `tree rendered ${rows} rows`);
         // Off-screen rows are virtualised; open through search like a user would.
@@ -459,9 +656,10 @@ try {
             normal.push(Date.now() - at);
         }
         const typical = normal.sort((a, b) => a - b)[1];
-        writeFileSync(`${artifacts}/timing.json`, JSON.stringify({ bigNote: { firstPaint, liveAt, switchMs }, typicalSwitchMs: typical, normal, rows }, null, 2));
-        assert.ok(firstPaint < 2000, `first paint of a 1 MB note ${firstPaint}ms`);
-        assert.ok(typical < 250, `switching notes ${typical}ms`);
+        writeFileSync(`${artifacts}/timing.json`, JSON.stringify({ bigNote: { coldLive, firstPaint, liveAt, switchMs }, typicalSwitchMs: typical, normal, rows }, null, 2));
+        // PLAN.md targets: first paint under 1 s, switching notes under 150 ms.
+        assert.ok(firstPaint < 1000, `first paint of a 1 MB note ${firstPaint}ms`);
+        assert.ok(typical < 150, `switching notes ${typical}ms`);
         assert.deepEqual(errors, []);
         await page.context().close();
     });

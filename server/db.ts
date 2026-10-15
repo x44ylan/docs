@@ -63,6 +63,8 @@ create table if not exists versions (
     markdown text not null,
     author_id integer references users(id),
     source text not null check (source in ('web', 'mcp', 'restore', 'import')),
+    -- 1 when saved just before an agent edit or a restore: never pruned.
+    pinned integer not null default 0,
     created_at text not null default (datetime('now'))
 );
 create index if not exists versions_node on versions (node_id, created_at);
@@ -82,6 +84,10 @@ create virtual table if not exists search using fts5 (name, body, node_id uninde
 `);
 
 const statements = new Map<string, StatementSync>();
+
+// Columns added after the first release.
+const columns = (table: string) => (db.prepare(`pragma table_info(${table})`).all() as { name: string }[]).map(c => c.name);
+if (!columns('versions').includes('pinned')) db.exec('alter table versions add column pinned integer not null default 0');
 const prepare = (sql: string) => {
     let statement = statements.get(sql);
     if (!statement) statements.set(sql, (statement = db.prepare(sql)));

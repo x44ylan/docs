@@ -1,7 +1,7 @@
 // One editor schema for the browser, the sync server and MCP. Every place that
 // converts between Markdown and the editor uses `markdown` from this file, so
 // the file on disk, live edits and agent writes always agree.
-import { getSchema, type AnyExtension, type JSONContent } from '@tiptap/core';
+import { getSchema, Node as TiptapNode, type AnyExtension, type JSONContent } from '@tiptap/core';
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
 import Image from '@tiptap/extension-image';
 import { TaskItem, TaskList } from '@tiptap/extension-list';
@@ -35,7 +35,8 @@ const CompactTable = Table.extend({
         if (!rows.length) return '';
         const line = (cells: string[]) => `| ${cells.join(' | ')} |`;
         const rule = rows[0].map(cell => ({ left: ':---', right: '---:', center: ':---:' })[cell.align ?? ''] ?? '---');
-        return `\n${[line(rows[0].map(cell => cell.text)), line(rule), ...rows.slice(1).map(row => line(row.map(cell => cell.text)))].join('\n')}\n`;
+        // Blocks are already joined with a blank line; no extra padding.
+        return [line(rows[0].map(cell => cell.text)), line(rule), ...rows.slice(1).map(row => line(row.map(cell => cell.text)))].join('\n');
     },
 });
 
@@ -44,10 +45,30 @@ export const slug = (text: string) => text.toLowerCase().trim().replace(/[^\p{L}
 
 export const lowlight = createLowlight();
 
+// Raw HTML blocks (a line starting with `<div>`, `<!-- -->`, ...) are kept as
+// written and shown as plain text, never rendered or re-escaped.
+const HtmlBlock = TiptapNode.create({
+    name: 'htmlBlock',
+    group: 'block',
+    content: 'text*',
+    marks: '',
+    code: true,
+    defining: true,
+    parseHTML: () => [{ tag: 'pre[data-html-block]', preserveWhitespace: 'full' }],
+    renderHTML: () => ['pre', { 'data-html-block': '', class: 'html-block' }, ['code', 0]],
+    renderMarkdown: (node: JSONContent) => (node.content ?? []).map(child => child.text ?? '').join(''),
+});
+
 // Browser-only behaviour (node views, collaboration, menus) is added by the
 // client on top of these; they never change what is stored.
+// No automatic trailing paragraph: it would edit every note that ends with a
+// heading, table or code block just by opening it.
+const starter = { codeBlock: false, undoRedo: false, trailingNode: false, link: { openOnClick: false, autolink: false, linkOnPaste: true } } as const;
+// The browser swaps in its own heading (with an anchor node view); the node
+// type, and therefore stored content, is identical.
+export const starterKit = (options: Partial<Parameters<typeof StarterKit.configure>[0]> = {}) => StarterKit.configure({ ...starter, ...options });
 export const extensions: AnyExtension[] = [
-    StarterKit.configure({ codeBlock: false, undoRedo: false, link: { openOnClick: false, autolink: false, linkOnPaste: true } }),
+    starterKit(),
     CodeBlockLowlight.configure({ lowlight, defaultLanguage: null }),
     Image.configure({ inline: true }),
     TaskList.extend({
@@ -58,6 +79,7 @@ export const extensions: AnyExtension[] = [
     TableRow,
     TableHeader,
     TableCell,
+    HtmlBlock,
 ];
 
 export const schema = getSchema(extensions);
@@ -69,7 +91,9 @@ const manager = new MarkdownManager({ extensions });
 Object.assign(manager, {
     parseHTMLToken(this: { htmlAsLiteralText: (html: string, block: boolean) => JSONContent | null }, token: { text?: string; raw?: string; block?: boolean }) {
         const html = token.text || token.raw || '';
-        return html.trim() ? this.htmlAsLiteralText(html, !!token.block) : null;
+        if (!html.trim()) return null;
+        if (token.block) return { type: 'htmlBlock', content: [{ type: 'text', text: html.replace(/\s+$/, '') }] };
+        return this.htmlAsLiteralText(html, false);
     },
     encodeTextForMarkdown(this: { codeTypes: Set<string> }, text: string, node: JSONContent, parent?: JSONContent) {
         if ((parent?.type && this.codeTypes.has(parent.type)) || (node.marks ?? []).some(mark => this.codeTypes.has(mark.type))) return text;
@@ -91,7 +115,23 @@ Object.assign(manager, {
 const wrapHref = (markdown: string) =>
     markdown.replace(/\]\(([^)<\s"]+(?: [^)"]*?))(\s+"[^"]*")?\)/g, (_, href: string, title = '') => `](<${href}>${title})`);
 
+// YAML front matter at the very top is kept verbatim as a `frontmatter` code
+// block (otherwise its closing `---` turns the text into a heading).
+const FRONT = /^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/;
+
 export const markdown = {
-    parse: (text: string): JSONContent => manager.parse(wrapHref(text)),
-    serialize: (doc: JSONContent): string => manager.serialize(doc).replace(/\]\(<([^>\n]*)>/g, ']($1').replace(/\s+$/, '') + '\n',
+    parse(text: string): JSONContent {
+        const front = FRONT.exec(text);
+        const doc = manager.parse(wrapHref(front ? text.slice(front[0].length) : text));
+        if (front) doc.content = [{ type: 'codeBlock', attrs: { language: 'frontmatter' }, content: front[1] ? [{ type: 'text', text: front[1] }] : [] }, ...(doc.content ?? [])];
+        return doc;
+    },
+    serialize(doc: JSONContent): string {
+        const [first, ...rest] = doc.content ?? [];
+        const front = first?.type === 'codeBlock' && first.attrs?.language === 'frontmatter';
+        const body = manager.serialize(front ? { ...doc, content: rest } : doc).replace(/\]\(<([^>\n]*)>/g, ']($1').replace(/\s+$/, '');
+        if (!front) return body + '\n';
+        const yaml = (first.content ?? []).map(n => n.text ?? '').join('');
+        return `---\n${yaml}\n---\n${body ? `\n${body}\n` : ''}`;
+    },
 };

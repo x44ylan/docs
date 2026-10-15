@@ -1,11 +1,11 @@
 // JSON API for the browser. Every route runs as the Cloudflare Access user.
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { extname, join, posix } from 'node:path';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { Hono, type Context } from 'hono';
 import { assertAccess, assertion, identify, type User } from './auth.ts';
-import { all, blobsDir, get, HttpError, run, tx } from './db.ts';
+import { all, blobsDir, filesDir, get, HttpError, run, tx } from './db.ts';
 import * as notes from './notes.ts';
 import { disconnect, edit, treeChanged } from './sync.ts';
 
@@ -82,12 +82,30 @@ api.post('/vaults', async c => {
     return c.json({ id: vaultId, name: vault.name }, 201);
 });
 
+const noteJson = (found: notes.Node, user: User) => ({
+    ...found,
+    path: notes.path(found.id),
+    markdown: found.kind === 'note' ? notes.markdownOf(found.id) : '',
+    epoch: get<{ epoch: string | null }>('select epoch from docs where node_id = ?', found.id)?.epoch ?? null,
+    backlinks: notes.backlinks(found.id),
+    pinned: !!get('select 1 from pins where user_id = ? and node_id = ?', user.id, found.id),
+});
+
+// `?open` also returns the main note, so opening a vault takes one request.
 api.get('/vaults/:vault', c => {
     const vaultId = vaultOf(c);
     const user = c.get('user');
     const vault = get<{ id: number; name: string; owner_id: number; public: number; share_token: string | null }>(
         'select id, name, owner_id, public, share_token from vaults where id = ?', vaultId)!;
-    return c.json({ ...vault, main: notes.mainNote(vaultId), nodes: notes.tree(vaultId), pins: notes.pins(user, vaultId).map(p => p.id) });
+    const main = notes.mainNote(vaultId);
+    return c.json({
+        ...vault,
+        main,
+        user,
+        nodes: notes.tree(vaultId),
+        pins: notes.pins(user, vaultId).map(p => p.id),
+        ...(c.req.query('open') !== undefined && main ? { open: noteJson(notes.liveNode(main), user) } : {}),
+    });
 });
 
 api.patch('/vaults/:vault', async c => {
@@ -107,8 +125,12 @@ api.delete('/vaults/:vault', c => {
         disconnect(user.id, vaultId);
         return c.body(null, 204);
     }
-    run('delete from vaults where id = ?', vaultId);
     treeChanged(vaultId);
+    run('delete from vaults where id = ?', vaultId);
+    // Deleting a vault is final: its Markdown mirror goes too; attachment
+    // files are removed by the next prune.
+    rmSync(join(filesDir, String(vaultId)), { recursive: true, force: true });
+    notes.sweepBlobs();
     return c.body(null, 204);
 });
 
@@ -175,18 +197,7 @@ api.post('/vaults/:vault/nodes', async c => {
     return c.json(created, 201);
 });
 
-api.get('/vaults/:vault/nodes/:node', c => {
-    const found = noteIn(c);
-    const user = c.get('user');
-    return c.json({
-        ...found,
-        path: notes.path(found.id),
-        markdown: found.kind === 'note' ? notes.markdownOf(found.id) : '',
-        epoch: get<{ epoch: string | null }>('select epoch from docs where node_id = ?', found.id)?.epoch ?? null,
-        backlinks: notes.backlinks(found.id),
-        pinned: !!get('select 1 from pins where user_id = ? and node_id = ?', user.id, found.id),
-    });
-});
+api.get('/vaults/:vault/nodes/:node', c => c.json(noteJson(noteIn(c), c.get('user'))));
 
 api.patch('/vaults/:vault/nodes/:node', async c => {
     const found = noteIn(c);
@@ -247,6 +258,7 @@ api.delete('/vaults/:vault/trash/:node', c => {
     const vaultId = vaultOf(c);
     if (notes.node(id(c, 'node'))?.vault_id !== vaultId) throw new HttpError(404);
     notes.purge(id(c, 'node'));
+    notes.sweepBlobs();
     return c.body(null, 204);
 });
 
@@ -349,43 +361,61 @@ api.post('/import', async c => {
     if (upload.size > 256 * 1024 * 1024) throw new HttpError(413, 'Archives are limited to 256 MB.');
     let entries: Record<string, Uint8Array>;
     let total = 0;
+    let count = 0;
     try {
         entries = unzipSync(new Uint8Array(await upload.arrayBuffer()), {
             filter: file => {
                 total += file.originalSize;
-                if (total > 256 * 1024 * 1024) throw new Error('too large');
-                return !file.name.endsWith('/') && !/(^|\/)(\.|__MACOSX)/.test(file.name);
+                if (total > 256 * 1024 * 1024 || ++count > 5000) throw new Error('too large');
+                // Skip folders, hidden files, macOS metadata and unsafe paths.
+                return !file.name.endsWith('/') && !/(^|\/)(\.|__MACOSX)|\\|^\//.test(file.name);
             },
         });
     } catch {
-        throw new HttpError(400, 'Could not read the archive.');
+        throw new HttpError(400, 'Could not read the archive (limits: 256 MB, 5,000 files).');
     }
     const name = notes.cleanName(upload.name.replace(/\.zip$/i, ''));
-    const vaultId = Number(run('insert into vaults (name, owner_id) values (?, ?)', name, user.id).lastInsertRowid);
-    // `A.md` + `A/B.md` becomes note A with sub-note B; other folders stay folders.
-    const paths = Object.keys(entries).filter(p => p.split('/').length <= 64).sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
-    const ids = new Map<string, number>();
-    const parentFor = (dir: string): number | null => {
-        if (dir === '.' || dir === '') return null;
-        const existing = ids.get(`${dir}.md`) ?? ids.get(dir);
-        if (existing) return existing;
-        const folder = notes.create(vaultId, parentFor(posix.dirname(dir)), 'folder', posix.basename(dir), '', user).id;
-        ids.set(dir, folder);
-        return folder;
+    // Names that are not valid in Docs (e.g. `a:b`) are cleaned, not rejected.
+    const safe = (raw: string) => {
+        const cleaned = raw.normalize('NFC').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').trim().slice(0, 255);
+        return cleaned && !/^\.+$/.test(cleaned) ? cleaned : 'untitled';
     };
-    for (const at of paths.filter(p => p.toLowerCase().endsWith('.md'))) {
-        const created = notes.create(vaultId, parentFor(posix.dirname(at)), 'note', posix.basename(at).slice(0, -3), strFromU8(entries[at]), user);
-        ids.set(at, created.id);
-    }
-    for (const at of paths.filter(p => types[extname(p).slice(1).toLowerCase()])) {
-        const ext = extname(at).slice(1).toLowerCase();
-        const parentId = parentFor(posix.dirname(at));
-        const stem = posix.basename(at).slice(0, -ext.length - 1);
-        const file = Number(run('insert into nodes (vault_id, parent_id, name, kind, ext) values (?, ?, ?, ?, ?)',
-            vaultId, parentId, notes.freeName(vaultId, parentId, 'file', notes.cleanName(stem)), 'file', ext).lastInsertRowid);
-        writeFileSync(blob(file), entries[at]);
-    }
-    for (const note of notes.tree(vaultId).filter(n => n.kind === 'note')) notes.indexNote(note.id, notes.markdownOf(note.id));
+    const paths = Object.keys(entries)
+        .filter(p => p.split('/').length <= 64 && !p.split('/').includes('..'))
+        .sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
+    // All or nothing: the vault and its notes are created in one transaction;
+    // attachment files are written after it commits.
+    const pending: [number, Uint8Array][] = [];
+    const vaultId = tx(() => {
+        const vaultId = Number(run('insert into vaults (name, owner_id) values (?, ?)', name, user.id).lastInsertRowid);
+        // `A.md` + `A/B.md` becomes note A with sub-note B; other folders stay folders.
+        const ids = new Map<string, number>();
+        const parentFor = (dir: string): number | null => {
+            if (dir === '.' || dir === '') return null;
+            const existing = ids.get(`${dir}.md`) ?? ids.get(dir);
+            if (existing) return existing;
+            const folder = notes.create(vaultId, parentFor(posix.dirname(dir)), 'folder', safe(posix.basename(dir)), '', user).id;
+            ids.set(dir, folder);
+            return folder;
+        };
+        for (const at of paths.filter(p => p.toLowerCase().endsWith('.md'))) {
+            const created = notes.create(vaultId, parentFor(posix.dirname(at)), 'note', safe(posix.basename(at).slice(0, -3)), strFromU8(entries[at]), user);
+            ids.set(at, created.id);
+        }
+        for (const at of paths.filter(p => types[extname(p).slice(1).toLowerCase()])) {
+            const ext = extname(at).slice(1).toLowerCase();
+            const parentId = parentFor(posix.dirname(at));
+            const stem = safe(posix.basename(at).slice(0, -ext.length - 1));
+            const file = Number(run('insert into nodes (vault_id, parent_id, name, kind, ext) values (?, ?, ?, ?, ?)',
+                vaultId, parentId, notes.freeName(vaultId, parentId, 'file', stem), 'file', ext).lastInsertRowid);
+            pending.push([file, entries[at]]);
+        }
+        // Links resolve once every note exists.
+        for (const note of notes.tree(vaultId).filter(n => n.kind === 'note')) notes.indexNote(note.id, notes.markdownOf(note.id));
+        return vaultId;
+    });
     mkdirSync(blobsDir, { recursive: true });
+    for (const [file, bytes] of pending) writeFileSync(blob(file), bytes);
+    notes.mirrorVault(vaultId);
     return c.json({ id: vaultId, name }, 201);
 });

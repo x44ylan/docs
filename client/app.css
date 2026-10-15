@@ -80,6 +80,8 @@
 .note { font-size: 15px; line-height: 1.75; }
 @media (max-width: 639px) { .note { font-size: 15px; } }
 .note :where(a) { color: var(--link); text-decoration: none; cursor: pointer; }
+.note a.broken-link { color: var(--muted-foreground); text-decoration: line-through; }
+.note pre.html-block { background: transparent !important; border: 1px dashed var(--border); color: var(--muted-foreground) !important; white-space: pre-wrap; }
 .note h1 { font-size: 1.75em; }
 .note h3 { font-size: 1.4em; }
 .note :where(h1, h2, h3, h4) { scroll-margin-top: 1rem; }

@@ -1,8 +1,8 @@
 // Vaults, the note tree, trash, links, search and history. Every write goes
 // through here so SQLite, the Markdown mirror and the search index agree.
-import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
-import { all, filesDir, get, HttpError, run, tx } from './db.ts';
+import { all, blobsDir, filesDir, get, HttpError, run, tx } from './db.ts';
 import type { User } from './auth.ts';
 
 export type Kind = 'note' | 'folder' | 'file';
@@ -66,15 +66,38 @@ function assertParent(vaultId: number, parentId: number | null, moving?: number)
 
 const mirrorPath = (vaultId: number, id: number) => join(filesDir, String(vaultId), path(id));
 
+// The mirror is a convenience copy: a failed write (disk full, permissions)
+// never loses an edit, because SQLite already committed it. Vaults with a
+// failed write are rebuilt on the next start.
+const stale = new Set<number>();
 function writeMirror(vaultId: number, id: number, markdown: string) {
-    const target = mirrorPath(vaultId, id);
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(`${target}.tmp`, markdown);
-    renameSync(`${target}.tmp`, target);
+    try {
+        const target = mirrorPath(vaultId, id);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(`${target}.tmp`, markdown);
+        renameSync(`${target}.tmp`, target);
+    } catch (error) {
+        stale.add(vaultId);
+        console.error(`mirror write failed for note ${id}:`, (error as Error).message);
+    }
 }
+
+export function repairMirrors() {
+    for (const { id } of all<{ id: number }>('select id from vaults')) mirrorVault(id);
+}
+export const mirrorsStale = () => stale.size > 0;
 
 // Rebuild one vault's mirror from SQLite after renames, moves and deletes.
 export function mirrorVault(vaultId: number) {
+    try {
+        rebuildMirror(vaultId);
+        stale.delete(vaultId);
+    } catch (error) {
+        stale.add(vaultId);
+        console.error(`mirror rebuild failed for vault ${vaultId}:`, (error as Error).message);
+    }
+}
+function rebuildMirror(vaultId: number) {
     const root = join(filesDir, String(vaultId));
     const staging = `${root}.next`;
     rmSync(staging, { recursive: true, force: true });
@@ -297,10 +320,15 @@ export function purge(id: number) {
 
 // --- History ---------------------------------------------------------------
 
-export function snapshot(id: number, markdown: string, user: User | null, source: 'web' | 'mcp' | 'restore' | 'import') {
-    const last = get<{ markdown: string }>('select markdown from versions where node_id = ? order by id desc limit 1', id);
-    if (last?.markdown === markdown) return;
-    run('insert into versions (node_id, markdown, author_id, source) values (?, ?, ?, ?)', id, markdown, user?.id ?? null, source);
+// `keep`: the version is the state just before an agent edit or a restore,
+// so retention never removes it.
+export function snapshot(id: number, markdown: string, user: User | null, source: 'web' | 'mcp' | 'restore' | 'import', keep = false) {
+    const last = get<{ id: number; markdown: string }>('select id, markdown from versions where node_id = ? order by id desc limit 1', id);
+    if (last?.markdown === markdown) {
+        if (keep) run('update versions set pinned = 1 where id = ?', last.id);
+        return;
+    }
+    run('insert into versions (node_id, markdown, author_id, source, pinned) values (?, ?, ?, ?, ?)', id, markdown, user?.id ?? null, source, keep ? 1 : 0);
 }
 
 export const versions = (id: number) =>
@@ -314,14 +342,22 @@ export const version = (noteId: number, id: number) =>
     get<{ markdown: string; created_at: string }>('select markdown, created_at from versions where node_id = ? and id = ?', noteId, id);
 
 // Keep everything for 7 days, one per day to 90 days, then one per week.
-// Trash is purged after 30 days.
+// Snapshots taken before an agent edit or a restore are always kept, so an
+// agent's change can be undone however old it is. Trash is purged after 30 days.
 export function prune() {
-    run(`delete from versions where created_at < datetime('now', '-7 days') and id not in (
+    run(`delete from versions where created_at < datetime('now', '-7 days') and pinned = 0 and id not in (
         select max(id) from versions where created_at < datetime('now', '-7 days')
         group by node_id, case when created_at >= datetime('now', '-90 days') then date(created_at) else strftime('%Y-%W', created_at) end)`);
     for (const { id } of all<{ id: number }>(`select id from nodes where trash_root = id and deleted_at < datetime('now', '-30 days')`)) {
         if (node(id)) purge(id);
     }
+    sweepBlobs();
+}
+
+// Attachment files whose node row is gone (purged, vault deleted).
+export function sweepBlobs() {
+    const live = new Set(all<{ id: number }>(`select id from nodes where kind = 'file'`).map(row => String(row.id)));
+    for (const name of readdirSync(blobsDir)) if (/^\d+$/.test(name) && !live.has(name)) rmSync(join(blobsDir, name), { force: true });
 }
 
 // --- Search, recent, pins --------------------------------------------------

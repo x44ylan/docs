@@ -38,7 +38,8 @@ export function resolve(tree: Tree, fromId: number, href: string): TreeNode | un
     if (/^[a-z][a-z0-9+.-]*:|^\/\/|^#/i.test(href)) return;
     let target = href.split('#')[0];
     try { target = decodeURI(target); } catch { /* raw */ }
-    const base = pathOf(tree, fromId).split('/').slice(0, -1);
+    // Relative links resolve against the note's folder, as on the server.
+    const base = pathOf(tree, fromId).split('/').slice(0, -1).filter(Boolean);
     const parts = target.startsWith('/') ? [] : [...base];
     for (const part of target.split('/')) {
         if (part === '..') parts.pop();

@@ -32,13 +32,21 @@ const parse = (name: string) => {
 };
 
 // Snapshot when an editing session has been quiet for 5 minutes, or ends.
-const quiet = new Map<number, NodeJS.Timeout>();
+const quiet = new Map<number, { timer: NodeJS.Timeout; user: User | null }>();
+function snapshotNow(id: number) {
+    const pending = quiet.get(id);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    quiet.delete(id);
+    snapshot(id, markdownOf(id), pending.user, 'web');
+}
 function snapshotLater(id: number, user: User | null) {
-    clearTimeout(quiet.get(id));
-    quiet.set(id, setTimeout(() => {
-        quiet.delete(id);
-        snapshot(id, markdownOf(id), user, 'web');
-    }, 5 * 60_000).unref());
+    clearTimeout(quiet.get(id)?.timer);
+    quiet.set(id, { user, timer: setTimeout(() => snapshotNow(id), 5 * 60_000).unref() });
+}
+// On shutdown: record a version for every note edited since its last one.
+export function snapshotAll() {
+    for (const id of [...quiet.keys()]) snapshotNow(id);
 }
 
 export const hocuspocus = new Hocuspocus<Context>({
@@ -69,15 +77,11 @@ export const hocuspocus = new Hocuspocus<Context>({
         const { kind, id } = parse(documentName);
         if (kind === 'vault' || !liveNode(id)) return;
         saveMarkdown(id, toMarkdown(document), lastContext?.user ?? null, Y.encodeStateAsUpdate(document));
-        if (lastContext?.source !== 'mcp') snapshotLater(id, lastContext?.user ?? null);
+        if (!lastContext?.source || lastContext.source === 'web') snapshotLater(id, lastContext?.user ?? null);
     },
     async afterUnloadDocument({ documentName }) {
         const { kind, id } = parse(documentName);
-        if (kind === 'note' && quiet.has(id)) {
-            clearTimeout(quiet.get(id));
-            quiet.delete(id);
-            snapshot(id, markdownOf(id), null, 'web');
-        }
+        if (kind === 'note') snapshotNow(id);
     },
 });
 
@@ -90,7 +94,8 @@ export async function edit(id: number, user: User, source: 'mcp' | 'restore' | '
     try {
         await connection.transact(doc => {
             const current = toMarkdown(doc);
-            if (source !== 'web') snapshot(id, current, null, source === 'mcp' ? 'mcp' : 'restore');
+            // Save who wrote the current text before an agent edit or restore.
+            if (source !== 'web') snapshot(id, current, null, 'web', true);
             result = change(current);
             if (result.length > 1_000_000) throw new HttpError(413, 'Notes are limited to 1,000,000 characters.');
             if (result !== current) setMarkdown(doc, result);
@@ -98,6 +103,8 @@ export async function edit(id: number, user: User, source: 'mcp' | 'restore' | '
     } finally {
         await connection.disconnect();
     }
+    // Record the agent's or restored text as its own version.
+    if (source !== 'web') snapshot(id, markdownOf(id), user, source);
     return markdownOf(id);
 }
 

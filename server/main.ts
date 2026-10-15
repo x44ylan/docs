@@ -9,7 +9,7 @@ import { api, fileAt, sendFile } from './api.ts';
 import { get, HttpError } from './db.ts';
 import { mcp } from './mcp.ts';
 import * as notes from './notes.ts';
-import { hocuspocus, upgrade } from './sync.ts';
+import { hocuspocus, snapshotAll, upgrade } from './sync.ts';
 
 const app = new Hono();
 const dist = join(import.meta.dirname, '../dist');
@@ -27,7 +27,8 @@ app.use(async (c, next) => {
     c.header('X-Frame-Options', 'SAMEORIGIN');
 });
 
-app.get('/up', c => c.text('ok'));
+// `/up?documents` also lists the live documents held in memory.
+app.get('/up', c => c.text(c.req.query('documents') === undefined ? 'ok' : `ok ${[...hocuspocus.documents.keys()].sort().join(' ')}`.trim()));
 app.all('/mcp', c => mcp(c.req.raw));
 app.route('/api', api);
 
@@ -98,13 +99,18 @@ server.on('upgrade', (request, socket, head) => {
 
 // Daily: prune history and empty trash older than 30 days.
 notes.prune();
+// Rebuild the Markdown mirror from SQLite on start (covers crashes and
+// failed writes), and retry any failed vault every hour.
+notes.repairMirrors();
 setInterval(notes.prune, 24 * 60 * 60_000).unref();
+setInterval(() => notes.mirrorsStale() && notes.repairMirrors(), 60 * 60_000).unref();
 
 // Save open documents before exiting.
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.on(signal, async () => {
         hocuspocus.flushPendingStores();
         await new Promise(resolve => setTimeout(resolve, 500));
+        snapshotAll();
         server.close();
         process.exit(0);
     });

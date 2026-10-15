@@ -7,7 +7,7 @@ import { generateHTML } from '@tiptap/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { extensions as schemaExtensions, markdown } from '../../shared/schema.ts';
-import type { Note, User } from '../api.ts';
+import { api, type Note, type User } from '../api.ts';
 import { cn } from '../ui.tsx';
 import { commands, editorExtensions, type Command, type MenuState, type NoteLink } from './extensions.ts';
 import { colorFor, openNote, type Session } from './sync.ts';
@@ -27,13 +27,14 @@ function head(text: string, limit = 20_000) {
     return text;
 }
 
-export function NoteView({ note, user, editable, links, file, openLink, onEditor, onPresence, onStatus }: {
+export function NoteView({ note, user, editable, links, file, openLink, linkExists, onEditor, onPresence, onStatus }: {
     note: Note;
     user: User;
     editable: boolean;
     links: (query: string) => NoteLink[];
     file: (href: string) => string;
     openLink: (href: string) => boolean;
+    linkExists: (href: string) => boolean | undefined;
     onEditor: (editor: Editor | null) => void;
     onPresence: (people: Presence) => void;
     onStatus: (online: boolean) => void;
@@ -51,14 +52,18 @@ export function NoteView({ note, user, editable, links, file, openLink, onEditor
         let alive = true;
         let current: Session | undefined;
         setReady(false);
-        void openNote(note.id, (note as Note & { epoch?: string | null }).epoch ?? null).then(opened => {
-            if (!alive) return opened.destroy();
-            current = opened;
-            setSession(opened);
-            void opened.synced.then(() => alive && setReady(true));
-            opened.provider.on('status', ({ status }: { status: string }) => onStatus(status === 'connected'));
-        });
-        return () => { alive = false; current?.destroy(); setSession(undefined); };
+        // Start syncing after the read-only preview has painted.
+        const frame = requestAnimationFrame(() => setTimeout(() => {
+            if (!alive) return;
+            void openNote(note.id, (note as Note & { epoch?: string | null }).epoch ?? null).then(opened => {
+                if (!alive) return opened.destroy();
+                current = opened;
+                setSession(opened);
+                void opened.synced.then(() => alive && setReady(true));
+                opened.provider.on('status', ({ status }: { status: string }) => onStatus(status === 'connected'));
+            });
+        }, 0));
+        return () => { alive = false; cancelAnimationFrame(frame); current?.destroy(); setSession(undefined); };
     }, [note.id]);
 
     // Instant read-only render of the first screenfuls from the Markdown the
@@ -70,18 +75,17 @@ export function NoteView({ note, user, editable, links, file, openLink, onEditor
     return (
         <div className="note prose prose-neutral dark:prose-invert relative max-w-none" data-ready={ready}>
             {!ready && <div className="ProseMirror" aria-busy="true" dangerouslySetInnerHTML={{ __html: html }} />}
-            {session && painted && (
-                <div hidden={!ready}>
-                    <Live key={note.id} session={session} user={user} editable={editable} links={links} file={file} openLink={openLink} onEditor={onEditor} onPresence={onPresence} />
-                </div>
+            {/* Mount once synced, so the editor binds to the full document. */}
+            {session && painted && ready && (
+                <Live key={note.id} note={note} session={session} user={user} editable={editable} links={links} file={file} openLink={openLink} linkExists={linkExists} onEditor={onEditor} onPresence={onPresence} />
             )}
         </div>
     );
 }
 
-function Live({ session, user, editable, links, file, openLink, onEditor, onPresence }: {
-    session: Session; user: User; editable: boolean; links: (q: string) => NoteLink[]; file: (href: string) => string;
-    openLink: (href: string) => boolean; onEditor: (editor: Editor | null) => void; onPresence: (people: Presence) => void;
+function Live({ note, session, user, editable, links, file, openLink, linkExists, onEditor, onPresence }: {
+    note: Note; session: Session; user: User; editable: boolean; links: (q: string) => NoteLink[]; file: (href: string) => string;
+    openLink: (href: string) => boolean; linkExists: (href: string) => boolean | undefined; onEditor: (editor: Editor | null) => void; onPresence: (people: Presence) => void;
 }) {
     const [slash, setSlash] = useState<MenuState<Command>>(null);
     const [linkMenu, setLinkMenu] = useState<MenuState<NoteLink>>(null);
@@ -90,6 +94,8 @@ function Live({ session, user, editable, links, file, openLink, onEditor, onPres
     linksRef.current = links;
     const openRef = useRef(openLink);
     openRef.current = openLink;
+    const existsRef = useRef(linkExists);
+    existsRef.current = linkExists;
 
     const editor = useEditor({
         editable,
@@ -99,11 +105,18 @@ function Live({ session, user, editable, links, file, openLink, onEditor, onPres
             ...editorExtensions({
                 file,
                 openLink: href => openRef.current(href),
+                exists: href => existsRef.current(href),
                 selectionMarkdown: e => markdown.serialize({ type: 'doc', content: e.state.selection.content().content.toJSON() ?? [] }).trim(),
                 notes: q => linksRef.current(q),
                 showCommands: setSlash,
                 showLinks: setLinkMenu,
                 rehighlight: () => rerender(n => n + 1),
+                upload: async upload => {
+                    const form = new FormData();
+                    form.set('file', upload);
+                    const done = await api<{ src: string; name: string }>(`/vaults/${note.vault_id}/nodes/${note.id}/files`, { form });
+                    return { ...done, image: upload.type.startsWith('image/') };
+                },
             }),
             Collaboration.configure({ document: session.doc, field: 'default' }),
             CollaborationCaret.configure({ provider: session.provider, user: { id: user.id, name: user.name, color: colorFor(user.id) } }),
