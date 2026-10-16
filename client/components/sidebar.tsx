@@ -9,6 +9,7 @@ import { cn, IconButton, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger
 
 export type TreeActions = {
     open: (node: TreeNode) => void;
+    warm: (node: TreeNode) => void;
     create: (parentId: number | null, kind: 'note' | 'folder') => void;
     rename: (node: TreeNode) => void;
     remove: (node: TreeNode) => void;
@@ -74,7 +75,7 @@ export function Sidebar({ name, tree, pins, selected, main, actions }: { name: s
                 <ul aria-label="Pinned" className="mb-1 border-b px-2 pb-1">
                     {pinned.map(node => (
                         <li key={node.id}>
-                            <button type="button" onClick={() => actions.open(node)} className={cn('flex min-h-11 w-full items-center gap-1.5 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground sm:min-h-8', selected === node.id && 'text-foreground')}>
+                            <button type="button" onPointerEnter={() => actions.warm(node)} onPointerDown={() => actions.warm(node)} onClick={() => actions.open(node)} className={cn('flex min-h-11 w-full items-center gap-1.5 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground sm:min-h-8', selected === node.id && 'text-foreground')}>
                                 <IconPin className="size-3.5 shrink-0" /><span className="truncate">{node.name}</span>
                             </button>
                         </li>
@@ -123,6 +124,8 @@ export function Sidebar({ name, tree, pins, selected, main, actions }: { name: s
                                 <button
                                     type="button"
                                     title={node.name}
+                                    onPointerEnter={() => actions.warm(node)}
+                                    onPointerDown={() => actions.warm(node)}
                                     onClick={() => (node.kind === 'folder' ? toggle(node.id) : actions.open(node))}
                                     className="flex min-h-11 min-w-0 flex-1 items-center gap-1.5 text-left outline-none focus-visible:underline sm:min-h-8"
                                 >

@@ -31,12 +31,20 @@ const useWide = () => {
     return wide;
 };
 
-// Last few opened notes, for instant switching back.
+// Recently opened or warmed notes, so switching paints at once instead of
+// waiting a round trip through Cloudflare (about 150-500 ms).
 const recent = new Map<number, Note>();
 const remember = (note: Note) => {
     recent.delete(note.id);
     recent.set(note.id, note);
-    while (recent.size > 8) recent.delete(recent.keys().next().value!);
+    while (recent.size > 48) recent.delete(recent.keys().next().value!);
+};
+const warming = new Set<number>();
+// Fetch a note ahead of the click (hover, touch, or a sub-note of the open note).
+const warm = (vaultId: number, id: number) => {
+    if (recent.has(id) || warming.has(id)) return;
+    warming.add(id);
+    void api<Note>(`/vaults/${vaultId}/nodes/${id}`, { quiet: true }).then(remember, () => undefined).finally(() => warming.delete(id));
 };
 
 export function VaultPage() {
@@ -111,6 +119,14 @@ export function VaultPage() {
             .catch(() => alive && setParams({}, { replace: true }));
         return () => { alive = false; };
     }, [vaultId, fileId]);
+    // Warm the open note's sub-notes (what tables and lists usually link to).
+    useEffect(() => {
+        if (!note) return;
+        const timer = setTimeout(() => {
+            for (const child of (tree.children.get(note.id) ?? []).filter(n => n.kind === 'note').slice(0, 24)) warm(vaultId, child.id);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [note?.id, tree]);
     useEffect(() => {
         const current = note && tree.nodes.get(note.id);
         if (note && current && current.name !== note.name) setNote({ ...note, name: current.name, path: pathOf(tree, note.id) });
@@ -306,7 +322,7 @@ export function VaultPage() {
                             pins={vault.pins}
                             selected={note?.id ?? null}
                             main={vault.main}
-                            actions={{ open, create, rename, remove: node => void remove(node), move: (node, parent) => void move(node, parent), pin: (node, on) => void pin(node, on), share: () => setPanel('share'), trash: () => setPanel('trash') }}
+                            actions={{ open, warm: node => node.kind === 'note' && warm(vaultId, node.id), create, rename, remove: node => void remove(node), move: (node, parent) => void move(node, parent), pin: (node, on) => void pin(node, on), share: () => setPanel('share'), trash: () => setPanel('trash') }}
                         />
                     )}
                 </aside>
