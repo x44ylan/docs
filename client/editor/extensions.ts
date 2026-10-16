@@ -501,6 +501,9 @@ export function editorExtensions(options: {
         }, options.showLinks),
         Extension.create({
             name: 'internalLinks',
+            // Table selection also handles clicks. Run links first so anchors
+            // in table cells cannot fall through to raw `.md` navigation.
+            priority: 1_000,
             addProseMirrorPlugins: () => [
                 new Plugin({
                     props: {
@@ -509,7 +512,7 @@ export function editorExtensions(options: {
                             const href = anchor?.getAttribute('href');
                             if (!href || event.button !== 0) return false;
                             if (options.openLink(href)) { event.preventDefault(); return true; }
-                            if (/^https?:/i.test(href) && (event.metaKey || event.ctrlKey || !_view.editable)) { window.open(href, '_blank', 'noopener'); return true; }
+                            if (/^https?:/i.test(href)) { event.preventDefault(); window.open(href, '_blank', 'noopener'); return true; }
                             return false;
                         },
                     },

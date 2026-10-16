@@ -602,6 +602,7 @@ try {
         await page.getByPlaceholder('Search notes').fill('alpha');
         await page.getByRole('option', { name: /Child/ }).first().click();
         await page.waitForURL(new RegExp(`file=${child.id}`));
+        await page.waitForFunction(() => document.title === 'Child');
         await page.getByRole('button', { name: 'More' }).click();
         await page.getByRole('menuitem', { name: 'History' }).click();
         await page.getByRole('dialog', { name: 'History' }).waitFor();
@@ -686,8 +687,10 @@ try {
         await crumbs.getByRole('button', { name: 'Show path' }).click();
         await page.getByRole('menuitem', { name: 'Child' }).click();
         await page.waitForURL(`**file=${child.id}`);
+        await page.waitForFunction(() => document.title === 'Child');
         await crumbs.getByRole('button', { name: 'Labs' }).click();
         await page.waitForURL(`**file=${main}`);
+        await page.waitForFunction(() => document.title === 'Labs');
         await page.waitForFunction(() => document.querySelector('nav[aria-label="Breadcrumb"]')?.textContent?.trim() === 'Labs');
         await page.getByRole('link', { name: 'Docs home' }).click();
         await page.getByRole('region', { name: 'Vaults' }).waitFor();
@@ -699,6 +702,29 @@ try {
         assert.deepEqual(errors, []);
         await page.context().close();
         await call('DELETE', `/vaults/${vault.id}/nodes/${leaf.id}`);
+    });
+
+    await check('browser: internal links inside tables stay in the SPA', async () => {
+        const linked = (await call('POST', '/vaults', { name: 'Linked' })).data;
+        const linkedMain = (await call('GET', `/vaults/${linked.id}`)).data.main as number;
+        const target = (await call('POST', `/vaults/${linked.id}/nodes`, { name: 'Target note', parent_id: linkedMain })).data;
+        await mcp('update', {
+            noteId: linkedMain,
+            operation: 'replace',
+            content: '# Linked\n\n| Title | Course |\n| --- | --- |\n| [Target note](/Linked/Target%20note.md) | [Example](https://example.com/) |\n',
+        });
+        const { page, errors } = await open({ width: 390, height: 844 }, alex);
+        await page.goto(`${base}/vaults/${linked.id}?file=${linkedMain}`);
+        await editorReady(page);
+        await page.locator('.note a', { hasText: 'Target note' }).click();
+        await page.waitForURL(`**file=${target.id}`);
+        await page.goto(`${base}/vaults/${linked.id}?file=${linkedMain}`);
+        await editorReady(page);
+        await page.getByRole('button', { name: 'Read', exact: true }).click();
+        await page.locator('.note a', { hasText: 'Target note' }).click();
+        await page.waitForURL(`**file=${target.id}`);
+        assert.deepEqual(errors, []);
+        await page.context().close();
     });
 
     await check('browser: progressive rendering on a 2,000-note vault and a 1 MB note', async () => {
