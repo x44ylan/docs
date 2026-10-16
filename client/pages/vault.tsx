@@ -250,12 +250,18 @@ export function VaultPage() {
             {(!online || !network) && <OfflineDot />}
             {!wide && editing && <IconButton label="Formatting" onClick={() => setTools(true)}><FormatIcon /></IconButton>}
             <IconButton label={editing ? 'Read' : 'Edit'} onClick={() => setMode(!editing)}>{editing ? <IconEye /> : <IconPencil />}</IconButton>
+            {wide && headings.length >= 2 && (
+                <Popover>
+                    <PopoverTrigger asChild><IconButton label="Contents"><IconListDetails /></IconButton></PopoverTrigger>
+                    <PopoverContent><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
+                </Popover>
+            )}
             <Menu>
                 <MenuTrigger asChild><IconButton label="More"><IconDots /></IconButton></MenuTrigger>
                 <MenuContent className="w-56">
                     <MenuItem onSelect={() => setPanel('palette')}><IconSearch />Search notes</MenuItem>
                     <MenuItem onSelect={() => setFinding(true)}><IconFileSearch />Find in note</MenuItem>
-                    {headings.length >= 2 && (
+                    {!wide && headings.length >= 2 && (
                         <Popover>
                             <PopoverTrigger asChild><MenuItem onSelect={event => event.preventDefault()}><IconListDetails />Contents</MenuItem></PopoverTrigger>
                             <PopoverContent side="left"><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
