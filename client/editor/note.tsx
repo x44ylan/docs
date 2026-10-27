@@ -75,7 +75,11 @@ export function NoteView({ note, user, editable, links, file, openLink, linkExis
 
     return (
         <div className="note prose prose-neutral dark:prose-invert relative max-w-none" data-ready={ready}>
-            {!ready && <div className="ProseMirror" aria-busy="true" dangerouslySetInnerHTML={{ __html: html }} />}
+            {!ready && <div className="ProseMirror" aria-busy="true" onClick={event => {
+                const anchor = (event.target as HTMLElement).closest('a');
+                const href = anchor?.getAttribute('href');
+                if (href && openLink(href)) event.preventDefault();
+            }} dangerouslySetInnerHTML={{ __html: html }} />}
             {/* Mount once synced, so the editor binds to the full document. */}
             {session && painted && ready && (
                 <Live key={note.id} note={note} session={session} user={user} editable={editable} links={links} file={file} openLink={openLink} linkExists={linkExists} onEditor={onEditor} onPresence={onPresence} />

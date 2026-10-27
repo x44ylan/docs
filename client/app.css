@@ -90,6 +90,12 @@
 .dark .note pre { background: #070708 !important; }
 .note img { border-radius: 4px; display: inline; }
 .note table p { margin: 0; }
+/* Wide tables scroll inside themselves, so the page never moves sideways. */
+.note table { display: block; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+.note .tableWrapper { max-width: 100%; overflow-x: auto; }
+.note .ProseMirror { overflow-wrap: anywhere; }
+.note :where(th, td) { overflow-wrap: normal; min-width: 6rem; }
+main.page-scroll { overflow-x: hidden; }
 .note :where(th, td) { padding: 0.4rem 0.6rem !important; text-align: left; vertical-align: top; }
 .note ul[data-type='taskList'] { list-style: none; padding-inline-start: 0.2rem; }
 .note ul[data-type='taskList'] li { display: flex; gap: 0.5rem; margin: 0.25em 0; }
@@ -141,3 +147,29 @@
 .diagram-messagebus { color: light-dark(#397983, #8cc5ce); }
 .diagram-boundary { fill: color-mix(in srgb, var(--muted-foreground) 4%, var(--background)); stroke: var(--border); stroke-dasharray: 6 4; }
 .diagram-label { fill: var(--muted-foreground); stroke: var(--background); stroke-width: 5px; paint-order: stroke; stroke-linejoin: round; }
+
+/* The page owns the outer scrollbar; a long outline scrolls quietly on demand. */
+.page-outline { scrollbar-color: transparent transparent; }
+.page-outline:hover, .page-outline:focus-within { scrollbar-color: var(--border) transparent; }
+
+/* A quiet page scrollbar, with a stable gutter and a transparent track. */
+.page-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    scrollbar-gutter: stable;
+}
+.page-scroll:hover { scrollbar-color: var(--muted-foreground) transparent; }
+@supports selector(::-webkit-scrollbar) {
+    .page-scroll, .page-scroll:hover { scrollbar-width: auto; scrollbar-color: auto; }
+    .page-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+    .page-scroll::-webkit-scrollbar-track { background: transparent; }
+    .page-scroll::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border: 2px solid transparent;
+        border-radius: 8px;
+        background-clip: padding-box;
+    }
+    .page-scroll:hover::-webkit-scrollbar-thumb { background-color: var(--muted-foreground); }
+    .page-scroll::-webkit-scrollbar-button { display: none; }
+    .page-scroll::-webkit-scrollbar-corner { background: transparent; }
+}

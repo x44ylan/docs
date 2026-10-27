@@ -19,15 +19,14 @@ import { ancestors, buildTree, isInside, pathOf, resolve } from '../tree.ts';
 import { title, useTheme } from '../theme.ts';
 import { Button, cn, Dialog, IconButton, Input, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger, Popover, PopoverContent, PopoverTrigger } from '../ui.tsx';
 
-const useWide = () => {
-    const query = '(min-width: 1024px)';
+const useWide = (query = '(min-width: 1024px)') => {
     const [wide, setWide] = useState(() => matchMedia(query).matches);
     useEffect(() => {
         const media = matchMedia(query);
         const update = () => setWide(media.matches);
         media.addEventListener('change', update);
         return () => media.removeEventListener('change', update);
-    }, []);
+    }, [query]);
     return wide;
 };
 
@@ -52,6 +51,7 @@ export function VaultPage() {
     const [params, setParams] = useSearchParams();
     const navigate = useNavigate();
     const wide = useWide();
+    const outlineWide = useWide('(min-width: 1280px)');
     const { dark, toggle: toggleTheme } = useTheme();
     const [vault, setVault] = useState<Vault | undefined>(() => cached(`vault:${vaultId}`));
     const [user, setUser] = useState<User | undefined>(() => cached('user'));
@@ -250,18 +250,12 @@ export function VaultPage() {
             {(!online || !network) && <OfflineDot />}
             {!wide && editing && <IconButton label="Formatting" onClick={() => setTools(true)}><FormatIcon /></IconButton>}
             <IconButton label={editing ? 'Read' : 'Edit'} onClick={() => setMode(!editing)}>{editing ? <IconEye /> : <IconPencil />}</IconButton>
-            {wide && headings.length >= 2 && (
-                <Popover>
-                    <PopoverTrigger asChild><IconButton label="Contents"><IconListDetails /></IconButton></PopoverTrigger>
-                    <PopoverContent><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
-                </Popover>
-            )}
             <Menu>
                 <MenuTrigger asChild><IconButton label="More"><IconDots /></IconButton></MenuTrigger>
                 <MenuContent className="w-56">
                     <MenuItem onSelect={() => setPanel('palette')}><IconSearch />Search notes</MenuItem>
                     <MenuItem onSelect={() => setFinding(true)}><IconFileSearch />Find in note</MenuItem>
-                    {!wide && headings.length >= 2 && (
+                    {!outlineWide && headings.length >= 2 && (
                         <Popover>
                             <PopoverTrigger asChild><MenuItem onSelect={event => event.preventDefault()}><IconListDetails />Contents</MenuItem></PopoverTrigger>
                             <PopoverContent side="left"><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
@@ -332,27 +326,39 @@ export function VaultPage() {
                         />
                     )}
                 </aside>
-                <main ref={main} className="min-w-0 flex-1 overflow-y-auto">
-                    <div className="mx-auto w-full max-w-[46rem] px-4 pt-6 sm:px-8 sm:pt-10">
-                        {note && user ? (
-                            <NoteView
-                                key={note.id}
-                                note={note}
-                                user={user}
-                                editable={editing}
-                                links={noteLinks}
-                                file={fileUrl}
-                                openLink={openLink}
-                                linkExists={linkExists}
-                                onEditor={setEditor}
-                                onPresence={setPeople}
-                                onStatus={setOnline}
-                            />
-                        ) : vault && !fileId && (
-                            <div className="flex h-[60dvh] flex-col items-center justify-center gap-4">
-                                <p className="text-sm text-muted-foreground">Select a note</p>
-                                <Button variant="outline" onClick={() => create(null, 'note')}><IconFilePlus />New note</Button>
+                <main ref={main} className="page-scroll min-w-0 flex-1 overflow-y-auto">
+                    <div className={cn('mx-auto flex min-h-full w-full', outlineWide && note && headings.length >= 2 ? '' : 'max-w-[46rem]')}>
+                        <div className="min-w-0 flex-1">
+                            <div className="mx-auto w-full max-w-[46rem] px-4 pt-6 sm:px-8 sm:pt-10">
+                                {note && user ? (
+                                    <NoteView
+                                        key={note.id}
+                                        note={note}
+                                        user={user}
+                                        editable={editing}
+                                        links={noteLinks}
+                                        file={fileUrl}
+                                        openLink={openLink}
+                                        linkExists={linkExists}
+                                        onEditor={setEditor}
+                                        onPresence={setPeople}
+                                        onStatus={setOnline}
+                                    />
+                                ) : vault && !fileId && (
+                                    <div className="flex h-[60dvh] flex-col items-center justify-center gap-4">
+                                        <p className="text-sm text-muted-foreground">Select a note</p>
+                                        <Button variant="outline" onClick={() => create(null, 'note')}><IconFilePlus />New note</Button>
+                                    </div>
+                                )}
                             </div>
+                        </div>
+                        {outlineWide && note && headings.length >= 2 && (
+                            <nav aria-label="On this page" className="page-outline mr-10 sticky top-0 max-h-[calc(100dvh-3.5rem)] w-[14.5rem] shrink-0 self-start overflow-y-auto overscroll-contain pr-6 pt-10 pb-6 print:hidden">
+                                <div>
+                                    <h2 className="mb-3 pl-4 text-sm font-semibold">On this page</h2>
+                                    <Contents headings={headings} inline onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+                                </div>
+                            </nav>
                         )}
                     </div>
                 </main>

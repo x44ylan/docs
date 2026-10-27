@@ -535,6 +535,65 @@ try {
         await page.context().close();
     });
 
+    // Outline failures: cramped layouts, stale active sections, broken jumps,
+    // mobile access, live heading edits, and an empty rail after switching notes.
+    await check('browser: right contents follows scrolling, edits and viewport changes', async () => {
+        const content = '# Overview\n\n' + 'Introduction paragraph.\n\n'.repeat(24) + '## Details\n\n' + 'Details paragraph.\n\n'.repeat(24) + '### Next steps\n\nFinish here.\n';
+        const note = await mcp('create', { vaultId: vault.id, name: 'Outline', content });
+        const { page, errors } = await open({ width: 1440, height: 900 });
+        await page.goto(`${base}/vaults/${vault.id}?file=${note.id}`);
+        await editorReady(page);
+        const rail = page.getByRole('navigation', { name: 'On this page' });
+        await rail.waitFor();
+        const mainBox = await page.locator('main').boundingBox();
+        const railBox = await rail.boundingBox();
+        const noteBox = await page.locator('.note').boundingBox();
+        assert.ok(railBox!.x >= noteBox!.x + noteBox!.width);
+        assert.ok(railBox!.x + railBox!.width <= mainBox!.x + mainBox!.width);
+        assert.equal(await rail.evaluate(el => el.closest('main') !== null), true);
+        const guideBox = await rail.getByRole('list', { name: 'Contents' }).boundingBox();
+        const leftGap = noteBox!.x - mainBox!.x;
+        const rightGap = guideBox!.x - (noteBox!.x + noteBox!.width);
+        assert.ok(Math.abs(leftGap - rightGap) <= 2, `uneven note spacing: ${leftGap}px left, ${rightGap}px right`);
+        await rail.getByRole('button', { name: 'Details', exact: true }).click();
+        await page.waitForFunction(() => document.querySelector('[aria-current="location"]')?.textContent === 'Details');
+        await page.locator('main').evaluate(el => { el.scrollTop = el.scrollHeight; });
+        await page.waitForFunction(() => document.querySelector('[aria-current="location"]')?.textContent === 'Next steps');
+        assert.ok(Math.abs((await rail.boundingBox())!.y - railBox!.y) < 2, 'outline stays sticky');
+        await page.screenshot({ path: `${artifacts}/contents-desktop.png` });
+        await page.getByRole('button', { name: 'Read', exact: true }).click();
+        await rail.waitFor();
+        await page.locator('main').evaluate(el => { el.scrollTop = 0; });
+        await page.waitForFunction(() => document.querySelector('[aria-current="location"]')?.textContent === 'Overview');
+        await page.screenshot({ path: `${artifacts}/contents-read.png` });
+        for (const width of [1100, 390]) {
+            await page.setViewportSize({ width, height: 844 });
+            await rail.waitFor({ state: 'detached' });
+            await page.getByRole('button', { name: 'More', exact: true }).click();
+            await page.getByRole('menuitem', { name: 'Contents', exact: true }).click();
+            await page.getByRole('list', { name: 'Contents' }).getByRole('button', { name: 'Details', exact: true }).waitFor();
+            assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+            await page.screenshot({ path: `${artifacts}/contents-${width}.png` });
+            await page.keyboard.press('Escape');
+            await page.keyboard.press('Escape');
+            if (width === 1100) await page.getByRole('button', { name: 'Toggle notes', exact: true }).click();
+        }
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await rail.waitFor();
+        await mcp('update', { noteId: note.id, operation: 'replace', content: '# Renamed\n\n## Updated\n\nNew text.\n' });
+        await rail.getByRole('button', { name: 'Updated', exact: true }).waitFor();
+        assert.equal(await rail.getByRole('button', { name: 'Details', exact: true }).count(), 0);
+        await mcp('update', { noteId: note.id, operation: 'replace', content: Array.from({ length: 60 }, (_, i) => `## Section ${i + 1}\n\nText.\n`).join('\n') });
+        await rail.getByRole('button', { name: 'Section 60', exact: true }).waitFor({ state: 'attached' });
+        await rail.getByRole('button', { name: 'Section 60', exact: true }).click();
+        await page.waitForFunction(() => document.querySelector('[aria-current="location"]')?.textContent === 'Section 60');
+        assert.ok((await rail.boundingBox())!.y >= 55, 'long outline remains within the page');
+        await mcp('update', { noteId: note.id, operation: 'replace', content: 'No headings.\n' });
+        await rail.waitFor({ state: 'detached' });
+        assert.deepEqual(errors, []);
+        await page.context().close();
+    });
+
     await check('browser: / commands, [[ note links, find, contents, pin, copy as Markdown', async () => {
         const { page, errors } = await open({ width: 1440, height: 900 });
         await page.goto(`${base}/vaults/${vault.id}?file=${main}`);
@@ -568,10 +627,7 @@ try {
         const saved = (await mcp('read', { noteId: main })).content as string;
         assert.match(saved, /^## Section two$/m);
         assert.match(saved, /\[Grand\]\(\/Labs\/Child\/Grand\.md\)/);
-        await page.getByRole('button', { name: 'More' }).click();
-        await page.getByRole('menuitem', { name: 'Contents' }).click();
-        await page.getByRole('list', { name: 'Contents' }).getByRole('button', { name: 'Section two' }).waitFor();
-        await page.keyboard.press('Escape');
+        await page.getByRole('navigation', { name: 'On this page' }).getByRole('button', { name: 'Section two' }).waitFor();
         await page.keyboard.press('ControlOrMeta+f');
         await page.getByRole('searchbox', { name: 'Find in note' }).fill('section');
         assert.equal(await page.locator('.find-match').count(), 1);
@@ -721,8 +777,49 @@ try {
         await page.goto(`${base}/vaults/${linked.id}?file=${linkedMain}`);
         await editorReady(page);
         await page.getByRole('button', { name: 'Read', exact: true }).click();
+        const popups: string[] = [];
+        page.on('popup', popup => popups.push(popup.url()));
         await page.locator('.note a', { hasText: 'Target note' }).click();
         await page.waitForURL(`**file=${target.id}`);
+        await wait(500);
+        assert.deepEqual(popups, []);
+        assert.deepEqual(errors, []);
+        await page.context().close();
+    });
+
+    await check('browser: wide tables scroll inside the note on a phone', async () => {
+        const note = await mcp('create', { vaultId: vault.id, name: 'Wide table', content: '# Wide\n\n| Stack | SQL | Command | File | Deserialize |\n| --- | --- | --- | --- | --- |\n| PHP | mysqli_query_with_a_very_long_function_name | system_exec_passthru_shell_exec | include_require_once_everywhere | unserialize_phar_wrapper_chain |\n' });
+        const { page, errors } = await open({ width: 390, height: 844 });
+        await page.goto(`${base}/vaults/${vault.id}?file=${note.id}`);
+        await editorReady(page);
+        const sizes = await page.evaluate(() => {
+            const main = document.querySelector('main')!;
+            const table = document.querySelector<HTMLElement>('.note table')!;
+            main.scrollLeft = 200;
+            table.scrollLeft = 200;
+            return { main: main.scrollLeft, page: document.scrollingElement!.scrollLeft, table: table.scrollLeft };
+        });
+        assert.equal(sizes.main, 0);
+        assert.equal(sizes.page, 0);
+        assert.ok(sizes.table > 0, 'the table itself scrolls');
+        await page.screenshot({ path: `${artifacts}/wide-table-390.png` });
+        assert.deepEqual(errors, []);
+        await page.context().close();
+    });
+
+    await check('browser: table links work before live sync is ready', async () => {
+        const linked = (await call('POST', '/vaults', { name: 'Preview links' })).data;
+        const linkedMain = (await call('GET', `/vaults/${linked.id}`)).data.main as number;
+        const target = (await call('POST', `/vaults/${linked.id}/nodes`, { name: 'Target', parent_id: linkedMain })).data;
+        await mcp('update', { noteId: linkedMain, operation: 'replace', content: '# Preview links\n\n| Note |\n| --- |\n| [Target](/Preview%20links/Target.md) |\n' });
+        const { page, errors } = await open({ width: 1440, height: 900 });
+        // Keep the initial HTML preview visible, as on a slow or offline socket.
+        await page.routeWebSocket('**/sync', () => {});
+        await page.goto(`${base}/vaults/${linked.id}?file=${linkedMain}`);
+        await page.locator('.note [aria-busy="true"] a').click();
+        await page.waitForURL(`**file=${target.id}`, { timeout: 5000 });
+        assert.equal(await page.locator('body').innerText() === 'Not found', false);
+        await page.screenshot({ path: `${artifacts}/preview-link.png` });
         assert.deepEqual(errors, []);
         await page.context().close();
     });

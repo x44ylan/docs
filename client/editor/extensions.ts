@@ -507,6 +507,16 @@ export function editorExtensions(options: {
             addProseMirrorPlugins: () => [
                 new Plugin({
                     props: {
+                        // Read-only views still get the browser's native link click.
+                        handleDOMEvents: {
+                            click(_view, event) {
+                                const anchor = (event.target as HTMLElement).closest('a');
+                                const href = anchor?.getAttribute('href');
+                                if (!href || event.button !== 0 || !options.openLink(href)) return false;
+                                event.preventDefault();
+                                return true;
+                            },
+                        },
                         handleClick(_view, _pos, event) {
                             const anchor = (event.target as HTMLElement).closest('a');
                             const href = anchor?.getAttribute('href');
