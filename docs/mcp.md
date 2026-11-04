@@ -33,6 +33,22 @@ codex mcp login docs
 Existing clients must remove the old Authorization and CF-Access service-token
 headers before signing in. Reconnect the client after login.
 
+### Agents on the Docs host
+
+Codex running on the same machine can skip OAuth. The container exposes MCP on a
+private socket (`DOCS_MCP_SOCKET`, mode 0600) that acts as `DOCS_LOCAL_EMAIL`,
+reachable only through `docker exec`:
+
+```toml
+[mcp_servers.docs]
+command = "docker"
+args = ["exec", "-i", "docs-app", "node", "server/local-mcp.ts"]
+```
+
+Anyone who can run `docker exec` on the host already controls the data, so this
+adds no new access. The public `/mcp` route still requires Cloudflare Access.
+E2E: `node tests/local-mcp.ts`.
+
 ## Hosting
 
 Use one Cloudflare Access application covering the entire Docs hostname, with

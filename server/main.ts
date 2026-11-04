@@ -1,13 +1,15 @@
 // One process: static client, JSON API, live sync, MCP and public share links.
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { basename, join } from 'node:path';
-import { serve } from '@hono/node-server';
+import { getRequestListener, serve } from '@hono/node-server';
 import { generateHTML } from '@tiptap/html/server';
 import { Hono } from 'hono';
 import { extensions, markdown } from '../shared/schema.ts';
 import { api, fileAt, sendFile } from './api.ts';
+import type { User } from './auth.ts';
 import { dataDir, get, HttpError } from './db.ts';
-import { mcp } from './mcp.ts';
+import { local, mcp } from './mcp.ts';
 import * as notes from './notes.ts';
 import { hocuspocus, snapshotAll, upgrade } from './sync.ts';
 
@@ -102,6 +104,21 @@ app.get('*', c => {
 
 const port = Number(process.env.PORT ?? 3000);
 const server = serve({ fetch: app.fetch, port, hostname: process.env.HOST ?? '127.0.0.1' }, info => console.log(`docs on ${info.address}:${info.port}`));
+// Local agents (Codex on this host) reach MCP through `docker exec`, acting as
+// DOCS_LOCAL_EMAIL. The socket lives inside the container, mode 0600.
+const socketPath = process.env.DOCS_MCP_SOCKET;
+const localEmail = process.env.DOCS_LOCAL_EMAIL?.toLowerCase();
+if (socketPath && localEmail) {
+    if (existsSync(socketPath)) unlinkSync(socketPath);
+    const owner = new Hono();
+    owner.post('/mcp', c => {
+        const user = get<User>('select id, email, name from users where email = ?', localEmail);
+        return user ? local(c.req.raw, user) : c.text('Local MCP user has not signed in to Docs yet.', 503);
+    });
+    const listener = createServer(getRequestListener(owner.fetch));
+    listener.listen(socketPath, () => { chmodSync(socketPath, 0o600); console.log(`local mcp on ${socketPath}`); });
+}
+
 server.on('upgrade', (request, socket, head) => {
     if (new URL(request.url ?? '/', 'http://localhost').pathname === '/sync') void upgrade(request, socket, head);
     else socket.destroy();

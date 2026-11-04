@@ -94,6 +94,16 @@ export async function mcp(request: Request): Promise<Response> {
     } catch (error) {
         return new Response(error instanceof HttpError ? error.message : 'Forbidden', { status: error instanceof HttpError ? error.status : 403 });
     }
+    return serve(request, user);
+}
+
+// Host-only MCP for agents on the Docs machine. It is reachable only through
+// a private socket inside the container (`docker exec`), never the network.
+export function local(request: Request, user: User): Promise<Response> {
+    return serve(request, user);
+}
+
+async function serve(request: Request, user: User): Promise<Response> {
     // Stateless: one server per request, JSON responses, no session to leak.
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await tools(user).connect(transport);
