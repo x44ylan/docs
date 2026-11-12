@@ -46,8 +46,15 @@ export function Home() {
             />
             <input ref={upload} type="file" accept=".zip" hidden onChange={event => event.target.files?.[0] && void importZip(event.target.files[0])} />
             <main className="min-h-0 flex-1 overflow-y-auto">
-                <div className="mx-auto max-w-3xl space-y-8 px-3 py-4 sm:px-6 sm:py-8">
+                <div className="mx-auto max-w-3xl space-y-8 px-4 py-6 sm:px-6 sm:py-12">
                     <section aria-label="Vaults">
+                        <div className="mb-6 flex items-center justify-between gap-4">
+                            <div className="min-w-0">
+                                <h1 className="text-2xl font-semibold tracking-tight">Your vaults</h1>
+                                <p className="mt-1 text-sm text-muted-foreground">A place for every note.</p>
+                            </div>
+                            {!!data?.vaults.length && <Button variant="outline" onClick={() => setDialog({ kind: 'new', name: '' })}><IconPlus /><span>New vault</span></Button>}
+                        </div>
                         {data && !data.vaults.length ? (
                             <div className="flex flex-col items-center rounded-lg border border-dashed px-5 py-14 text-center">
                                 <IconFolder className="mb-4 size-7 text-muted-foreground" />
@@ -55,15 +62,15 @@ export function Home() {
                                 <Button className="mt-4" onClick={() => setDialog({ kind: 'new', name: '' })}><IconPlus />New vault</Button>
                             </div>
                         ) : (
-                            <ul className="divide-y overflow-hidden rounded-lg border">
+                            <ul className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-popover">
                                 {vaults.map(vault => (
-                                    <li key={vault.id} className="flex items-center pr-1 hover:bg-accent/50">
-                                        <Link to={`/vaults/${vault.id}`} className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
-                                            <IconFolder className="size-4 shrink-0 text-muted-foreground" />
+                                    <li key={vault.id} className="group flex items-center pr-2 transition-colors hover:bg-accent/40">
+                                        <Link to={`/vaults/${vault.id}`} className="flex min-w-0 flex-1 items-center gap-4 px-4 py-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset">
+                                            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-muted-foreground transition-colors group-hover:text-foreground"><IconFolder className="size-5" /></span>
                                             <span className="truncate text-sm font-medium">{vault.name}</span>
                                             <span className="ml-auto flex shrink-0 items-center gap-1 text-xs text-muted-foreground" title={`${vault.notes} notes`}>
                                                 {vault.public ? <IconWorld className="size-3.5" aria-label="Everyone" /> : vault.shared || vault.owner_id !== data?.user.id ? <IconUsers className="size-3.5" aria-label="Shared" /> : null}
-                                                <span>{vault.notes}</span>
+                                                <span>{vault.notes}<span className="hidden sm:inline"> {vault.notes === 1 ? 'note' : 'notes'}</span></span>
                                             </span>
                                         </Link>
                                         <Menu>
@@ -117,10 +124,10 @@ function NoteList({ label, icon, notes }: { label: string; icon: React.ReactNode
     // Phones show only vaults, as on the previous home page.
     return (
         <section aria-label={label} className="max-sm:hidden">
-            <h2 className="mb-2 flex items-center gap-1.5 px-1 text-xs font-medium text-muted-foreground [&_svg]:size-3.5">{icon}{label}</h2>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground [&_svg]:size-3.5">{icon}{label}</h2>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {notes.map(note => (
-                    <Link key={note.id} to={`/vaults/${note.vault_id}?file=${note.id}`} className="flex min-w-0 flex-col rounded-lg border px-3 py-2.5 outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring">
+                    <Link key={note.id} to={`/vaults/${note.vault_id}?file=${note.id}`} className="flex min-w-0 flex-col gap-1 rounded-lg border border-border/60 bg-popover px-4 py-3 outline-none transition-colors hover:border-border hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring">
                         <span className="truncate text-sm font-medium">{note.name}</span>
                         <span className="truncate text-xs text-muted-foreground">{note.vault}</span>
                     </Link>

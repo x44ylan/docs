@@ -26,10 +26,10 @@ export function Header({ brand, lead, crumbs, onTitle, center, actions, account,
     replace?: ReactNode;
 }) {
     return (
-        <header id="app-header" className="flex h-14 shrink-0 items-center gap-1 border-b bg-background/95 px-2 backdrop-blur sm:px-3 print:hidden">
+        <header id="app-header" className="flex h-14 shrink-0 items-center gap-2 border-b border-border/70 bg-background px-3 sm:px-4 print:hidden">
             {replace ?? (
                 <>
-                    <div className="flex min-w-0 flex-1 items-center gap-0.5">
+                    <div className="flex min-w-0 flex-1 items-center gap-1">
                         {brand ?? <HomeLink />}
                         {lead}
                         <Crumbs items={crumbs} onTitle={onTitle} tight={!!center} />
@@ -89,8 +89,8 @@ function Crumbs({ items, onTitle, tight }: { items: Crumb[]; onTitle?: () => voi
     );
 }
 
-export const DocIcon = ({ className = 'size-[18px]' }: { className?: string }) => (
-    <svg className={className} viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+export const DocIcon = ({ className = 'size-6' }: { className?: string }) => (
+    <svg className={className} viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M18 4H9a2 2 0 0 0-2 2v20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V11L18 4Z" />
         <path d="M18 4v5a2 2 0 0 0 2 2h5M12 17h8M12 22h5" />
     </svg>
@@ -104,8 +104,8 @@ export const FormatIcon = () => (
 );
 
 export const HomeLink = ({ className }: { className?: string }) => (
-    <Link to="/" aria-label="Docs home" title="Docs" className={`inline-flex size-9 shrink-0 items-center justify-center rounded-md text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring ${className ?? ''}`}>
-        <DocIcon />
+    <Link to="/" aria-label="Docs home" title="Back to Docs" className={`group inline-flex size-9 shrink-0 items-center justify-center rounded-md text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring ${className ?? ''}`}>
+        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors group-hover:bg-primary/85"><DocIcon /></span>
     </Link>
 );
 
