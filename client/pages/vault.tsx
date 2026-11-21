@@ -1,6 +1,6 @@
 // One vault, one page: switching notes swaps the editor without reloading.
 // Header: [home][tree] Vault / Parent / Note ··· toolbar ··· [actions][more] | [search][account]
-import { IconCopy, IconDots, IconEye, IconFilePlus, IconFileSearch, IconHistory, IconHome, IconLayoutSidebar, IconLink, IconListDetails, IconMoon, IconPencil, IconPin, IconPinnedOff, IconSearch, IconShare, IconSun, IconTrash, IconX } from '@tabler/icons-react';
+import { IconCopy, IconDots, IconEye, IconFilePlus, IconFileSearch, IconFolder, IconHistory, IconHome, IconLayoutSidebar, IconLink, IconListDetails, IconMoon, IconPencil, IconPin, IconPinnedOff, IconSearch, IconShare, IconSun, IconTrash, IconX } from '@tabler/icons-react';
 import type { Editor } from '@tiptap/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
@@ -72,7 +72,7 @@ export function VaultPage() {
     const [sidebar, setSidebar] = useState(() => matchMedia('(min-width: 1024px)').matches);
     const [tools, setTools] = useState(false);
     const [finding, setFinding] = useState(false);
-    const [panel, setPanel] = useState<'share' | 'history' | 'trash' | 'palette' | null>(null);
+    const [panel, setPanel] = useState<'share' | 'history' | 'trash' | 'palette' | 'vaults' | null>(null);
     const [naming, setNaming] = useState<{ title: string; value: string; submit: (name: string) => Promise<void> } | null>(null);
     const [, refreshHeadings] = useState(0);
     const main = useRef<HTMLElement>(null);
@@ -238,44 +238,49 @@ export function VaultPage() {
     const compactTools = !wide && tools && editing;
 
     // Page actions, most used first. Everything else lives in the More menu.
-    const actions = note && (
+    const actions = (
         <>
-            {!!people.length && (
-                <div className="mr-1 hidden -space-x-1.5 sm:flex" aria-label={`Also here: ${people.map(p => p.name).join(', ')}`}>
-                    {people.slice(0, 3).map(p => (
-                        <span key={p.id} title={p.name} style={{ background: p.color }} className="flex size-6 items-center justify-center rounded-full text-[11px] font-semibold text-white ring-2 ring-background">{p.name[0]?.toUpperCase()}</span>
-                    ))}
-                </div>
-            )}
-            {(!online || !network) && <OfflineDot />}
-            {!wide && editing && <IconButton label="Formatting" onClick={() => setTools(true)}><FormatIcon /></IconButton>}
-            <IconButton label={editing ? 'Read' : 'Edit'} onClick={() => setMode(!editing)}>{editing ? <IconEye /> : <IconPencil />}</IconButton>
+            {note && <>
+                {!!people.length && (
+                    <div className="mr-1 hidden -space-x-1.5 sm:flex" aria-label={`Also here: ${people.map(p => p.name).join(', ')}`}>
+                        {people.slice(0, 3).map(p => (
+                            <span key={p.id} title={p.name} style={{ background: p.color }} className="flex size-6 items-center justify-center rounded-full text-[11px] font-semibold text-white ring-2 ring-background">{p.name[0]?.toUpperCase()}</span>
+                        ))}
+                    </div>
+                )}
+                {(!online || !network) && <OfflineDot />}
+                {!wide && editing && <IconButton label="Formatting" onClick={() => setTools(true)}><FormatIcon /></IconButton>}
+                <IconButton label={editing ? 'Read' : 'Edit'} onClick={() => setMode(!editing)}>{editing ? <IconEye /> : <IconPencil />}</IconButton>
+            </>}
             <Menu>
                 <MenuTrigger asChild><IconButton label="More"><IconDots /></IconButton></MenuTrigger>
                 <MenuContent className="w-56">
-                    <MenuItem onSelect={() => setPanel('palette')}><IconSearch />Search notes</MenuItem>
-                    <MenuItem onSelect={() => setFinding(true)}><IconFileSearch />Find in note</MenuItem>
-                    {!outlineWide && headings.length >= 2 && (
-                        <Popover>
-                            <PopoverTrigger asChild><MenuItem onSelect={event => event.preventDefault()}><IconListDetails />Contents</MenuItem></PopoverTrigger>
-                            <PopoverContent side="left"><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
-                        </Popover>
-                    )}
-                    <MenuItem onSelect={() => void pin(note, !note.pinned)}>{note.pinned ? <IconPinnedOff /> : <IconPin />}{note.pinned ? 'Unpin' : 'Pin'}</MenuItem>
-                    <MenuItem onSelect={() => setPanel('history')}><IconHistory />History</MenuItem>
-                    <MenuSeparator />
-                    <MenuItem onSelect={() => void copyMarkdown()}><IconCopy />Copy as Markdown</MenuItem>
-                    <MenuItem onSelect={async () => { await navigator.clipboard.writeText(`${location.origin}/vaults/${vaultId}?file=${note.id}`); toast.success('Link copied'); }}><IconLink />Copy link</MenuItem>
-                    <MenuItem onSelect={() => create(note.id, 'note')}><IconFilePlus />New sub-note</MenuItem>
-                    {!!note.backlinks.length && (
-                        <>
-                            <MenuSeparator />
-                            <div className="px-2 pt-1 pb-0.5 text-xs text-muted-foreground">Linked from</div>
-                            {note.backlinks.map(link => <MenuItem key={link.id} onSelect={() => open(link.id)}><IconLink />{link.name}</MenuItem>)}
-                        </>
-                    )}
-                    <MenuSeparator />
-                    <MenuItem destructive onSelect={() => void remove(note)}><IconTrash />Delete</MenuItem>
+                    <MenuItem onSelect={() => setPanel('vaults')}><IconFolder />Switch vault</MenuItem>
+                    {note && <>
+                        <MenuItem onSelect={() => setPanel('palette')}><IconSearch />Search notes</MenuItem>
+                        <MenuItem onSelect={() => setFinding(true)}><IconFileSearch />Find in note</MenuItem>
+                        {!outlineWide && headings.length >= 2 && (
+                            <Popover>
+                                <PopoverTrigger asChild><MenuItem onSelect={event => event.preventDefault()}><IconListDetails />Contents</MenuItem></PopoverTrigger>
+                                <PopoverContent side="left"><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
+                            </Popover>
+                        )}
+                        <MenuItem onSelect={() => void pin(note, !note.pinned)}>{note.pinned ? <IconPinnedOff /> : <IconPin />}{note.pinned ? 'Unpin' : 'Pin'}</MenuItem>
+                        <MenuItem onSelect={() => setPanel('history')}><IconHistory />History</MenuItem>
+                        <MenuSeparator />
+                        <MenuItem onSelect={() => void copyMarkdown()}><IconCopy />Copy as Markdown</MenuItem>
+                        <MenuItem onSelect={async () => { await navigator.clipboard.writeText(`${location.origin}/vaults/${vaultId}?file=${note.id}`); toast.success('Link copied'); }}><IconLink />Copy link</MenuItem>
+                        <MenuItem onSelect={() => create(note.id, 'note')}><IconFilePlus />New sub-note</MenuItem>
+                        {!!note.backlinks.length && (
+                            <>
+                                <MenuSeparator />
+                                <div className="px-2 pt-1 pb-0.5 text-xs text-muted-foreground">Linked from</div>
+                                {note.backlinks.map(link => <MenuItem key={link.id} onSelect={() => open(link.id)}><IconLink />{link.name}</MenuItem>)}
+                            </>
+                        )}
+                        <MenuSeparator />
+                        <MenuItem destructive onSelect={() => void remove(note)}><IconTrash />Delete</MenuItem>
+                    </>}
                 </MenuContent>
             </Menu>
         </>
@@ -373,7 +378,8 @@ export function VaultPage() {
             <TrashDialog vaultId={vaultId} open={panel === 'trash'} onOpenChange={value => setPanel(value ? 'trash' : null)} onRestored={() => void loadVault()} />
             {note && <HistoryDialog vaultId={vaultId} noteId={note.id} current={() => (editor ? markdown.serialize(editor.getJSON()) : note.markdown)} open={panel === 'history'} onOpenChange={value => setPanel(value ? 'history' : null)} />}
             <Palette
-                open={panel === 'palette'}
+                open={panel === 'palette' || panel === 'vaults'}
+                vaultsOnly={panel === 'vaults'}
                 onOpenChange={value => setPanel(value ? 'palette' : null)}
                 vaultId={vaultId}
                 actions={[

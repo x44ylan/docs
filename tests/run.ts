@@ -732,6 +732,55 @@ try {
         }
     });
 
+    await check('browser: switch vault from More on desktop and phone', async () => {
+        const other = (await call('POST', '/vaults', { name: 'Notebook' })).data;
+        const otherMain = (await call('GET', `/vaults/${other.id}`)).data.main;
+        const hidden = (await call('POST', '/vaults', { name: 'Hidden notebook' }, sam)).data;
+        for (const width of [1440, 390]) {
+            const { page, errors } = await open({ width, height: 844 });
+            await page.goto(`${base}/vaults/${vault.id}?file=${child.id}`);
+            await editorReady(page);
+            await page.getByRole('button', { name: 'More', exact: true }).click();
+            await page.getByRole('menuitem', { name: 'Switch vault', exact: true }).click();
+            const dialog = page.getByRole('dialog', { name: 'Switch vault', exact: true });
+            await dialog.getByRole('option', { name: 'Notebook', exact: true }).waitFor();
+            assert.equal(await dialog.getByRole('option', { name: /Hidden notebook/ }).count(), 0);
+            await dialog.getByRole('option', { name: /Labs.*Current/ }).waitFor();
+            await page.screenshot({ path: `${artifacts}/switch-vault-${width}.png` });
+            await dialog.getByRole('option', { name: /Labs.*Current/ }).click();
+            await dialog.waitFor({ state: 'hidden' });
+            assert.ok(page.url().endsWith(`file=${child.id}`));
+            await page.getByRole('button', { name: 'More', exact: true }).click();
+            await page.getByRole('menuitem', { name: 'Switch vault', exact: true }).click();
+            await dialog.getByRole('combobox').fill('no match');
+            await dialog.getByText('No results', { exact: true }).waitFor();
+            await dialog.getByRole('combobox').fill('Notebook');
+            await page.keyboard.press('Enter');
+            await page.waitForURL(`**/vaults/${other.id}?file=${otherMain}`);
+            await editorReady(page);
+            await page.waitForFunction(() => document.title === 'Notebook');
+            await page.getByRole('button', { name: 'More', exact: true }).click();
+            await page.getByRole('menuitem', { name: 'Switch vault', exact: true }).click();
+            await dialog.getByRole('option', { name: 'Labs', exact: true }).click();
+            await page.waitForURL(`**/vaults/${vault.id}?file=${main}`);
+            await editorReady(page);
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+            assert.deepEqual(errors, []);
+            await page.context().close();
+        }
+        await call('DELETE', `/vaults/${other.id}/nodes/${otherMain}`);
+        const { page } = await open({ width: 390, height: 844 });
+        await page.goto(`${base}/vaults/${other.id}`);
+        await page.getByText('Select a note', { exact: true }).waitFor();
+        await page.getByRole('button', { name: 'More', exact: true }).click();
+        await page.getByRole('menuitem', { name: 'Switch vault', exact: true }).click();
+        await page.getByRole('dialog', { name: 'Switch vault' }).getByRole('option', { name: 'Labs', exact: true }).click();
+        await page.waitForURL(`**/vaults/${vault.id}?file=${main}`);
+        await page.context().close();
+        await call('DELETE', `/vaults/${other.id}`);
+        await call('DELETE', `/vaults/${hidden.id}`, undefined, sam);
+    });
+
     await check('browser: breadcrumb walks back up: note, parent, vault, home', async () => {
         const leaf = (await call('POST', `/vaults/${vault.id}/nodes`, { name: 'Leaf', parent_id: child.id })).data;
         const { page, errors } = await open({ width: 1440, height: 900 }, alex);

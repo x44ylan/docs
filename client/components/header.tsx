@@ -29,13 +29,13 @@ export function Header({ brand, lead, crumbs, onTitle, center, actions, account,
         <header id="app-header" className="flex h-14 shrink-0 items-center gap-2 border-b border-border/70 bg-background px-3 sm:px-4 print:hidden">
             {replace ?? (
                 <>
-                    <div className="flex min-w-0 flex-1 items-center gap-1">
+                    <div className="flex min-w-0 flex-1 items-center [&>button>svg]:size-[18px]">
                         {brand ?? <HomeLink />}
                         {lead}
                         <Crumbs items={crumbs} onTitle={onTitle} tight={!!center} />
                     </div>
                     {center && <div className="flex min-w-0 items-center">{center}</div>}
-                    <div className="flex shrink-0 items-center justify-end gap-0.5 lg:flex-1">
+                    <div className="flex shrink-0 items-center justify-end gap-1 lg:flex-1 [&>button>svg]:size-[18px]">
                         {actions}
                         {account}
                     </div>
@@ -57,7 +57,7 @@ function Crumbs({ items, onTitle, tight }: { items: Crumb[]; onTitle?: () => voi
     const shown: (Crumb | null)[] = !folded.length ? parents : tight ? [parents[0], null] : [parents[0], null, parents.at(-1)!];
     const slash = <span className="px-0.5 text-sm text-muted-foreground/50" aria-hidden="true">/</span>;
     return (
-        <nav aria-label="Breadcrumb" className="ml-1 flex min-w-0 flex-1 items-center">
+        <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center">
             {shown.map((crumb, i) => (
                 <Fragment key={i}>
                     <span className={cn("hidden min-w-0 items-center sm:flex", i === 0 ? "shrink-0" : "shrink")}>
@@ -89,10 +89,10 @@ function Crumbs({ items, onTitle, tight }: { items: Crumb[]; onTitle?: () => voi
     );
 }
 
-export const DocIcon = ({ className = 'size-6' }: { className?: string }) => (
-    <svg className={className} viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M18 4H9a2 2 0 0 0-2 2v20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V11L18 4Z" />
-        <path d="M18 4v5a2 2 0 0 0 2 2h5M12 17h8M12 22h5" />
+export const DocIcon = ({ className = 'size-[18px]' }: { className?: string }) => (
+    <svg className={className} viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M7 27V5h8c7 0 11 4 11 11s-4 11-11 11H7Z" />
+        <path d="M12 10v12M16 5v6h9" />
     </svg>
 );
 
@@ -104,8 +104,8 @@ export const FormatIcon = () => (
 );
 
 export const HomeLink = ({ className }: { className?: string }) => (
-    <Link to="/" aria-label="Docs home" title="Back to Docs" className={`group inline-flex size-9 shrink-0 items-center justify-center rounded-md text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring ${className ?? ''}`}>
-        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors group-hover:bg-primary/85"><DocIcon /></span>
+    <Link to="/" aria-label="Docs home" title="Back to Docs" className={`inline-flex size-9 shrink-0 items-center justify-center rounded-md text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring ${className ?? ''}`}>
+        <DocIcon />
     </Link>
 );
 

@@ -46,7 +46,7 @@ export function Share() {
     return (
         <div className="flex h-dvh flex-col">
             <Header
-                brand={<span className="inline-flex size-9 shrink-0 items-center justify-center"><span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"><DocIcon /></span></span>}
+                brand={<span className="inline-flex size-9 shrink-0 items-center justify-center"><DocIcon /></span>}
                 lead={<IconButton label="Toggle notes" className="max-sm:hidden" onClick={() => setSidebar(s => !s)}><IconLayoutSidebar /></IconButton>}
                 crumbs={!data ? [] : data.note && data.note.name !== data.name ? [{ label: data.name }, { label: data.note.name }] : [{ label: data.name }]}
                 onTitle={innerWidth < 640 ? () => setSidebar(s => !s) : undefined}
