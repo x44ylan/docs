@@ -732,6 +732,20 @@ try {
         }
     });
 
+    await check('browser: open vault sharing from More on desktop and phone', async () => {
+        for (const width of [1440, 390]) {
+            const { page } = await open({ width, height: 844 });
+            await page.goto(`${base}/vaults/${vault.id}?file=${child.id}`);
+            await editorReady(page);
+            await page.getByRole('button', { name: 'More', exact: true }).click();
+            assert.equal(await page.getByRole('menuitem', { name: 'Copy link', exact: true }).count(), 0);
+            await page.getByRole('menuitem', { name: 'Share', exact: true }).click();
+            const dialog = page.getByRole('dialog', { name: 'Share', exact: true });
+            await dialog.getByRole('textbox', { name: 'Add people by name or email' }).waitFor();
+            await page.close();
+        }
+    });
+
     await check('browser: switch vault from More on desktop and phone', async () => {
         const other = (await call('POST', '/vaults', { name: 'Notebook' })).data;
         const otherMain = (await call('GET', `/vaults/${other.id}`)).data.main;
@@ -931,6 +945,52 @@ try {
         assert.ok(typical < 150, `switching notes ${typical}ms`);
         assert.deepEqual(errors, []);
         await page.context().close();
+    });
+
+    await check('browser: shared code uses vault colors in light and dark mode', async () => {
+        const sample = 'const greeting = "<span>hello</span>";';
+        const note = await mcp('create', { vaultId: vault.id, name: 'Code colors', content: ['```javascript', sample, '```'].join('\n') });
+        const link = (await call('PATCH', `/vaults/${vault.id}/share`, { link: true })).data.share_token;
+        const { page: vaultPage } = await open({ width: 1440, height: 900 });
+        await vaultPage.goto(`${base}/vaults/${vault.id}?file=${note.id}`);
+        await editorReady(vaultPage);
+        const color = (page: Page) => page.locator('.note .hljs-keyword').first().evaluate(el => getComputedStyle(el).color);
+        const context = await browser!.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'light' });
+        const page = await context.newPage();
+        await page.goto(`${base}/share/${link}?file=${note.id}`);
+        const light = await color(page);
+        assert.equal(light, await color(vaultPage));
+        assert.equal(await page.locator('article pre code').textContent(), sample);
+        await page.getByRole('button', { name: 'Dark mode' }).click();
+        await vaultPage.evaluate(() => document.documentElement.classList.add('dark'));
+        assert.equal(await color(page), await color(vaultPage));
+        assert.notEqual(await color(page), light);
+        await page.reload();
+        await page.getByRole('button', { name: 'Light mode' }).waitFor();
+        await context.close();
+        await vaultPage.context().close();
+    });
+
+    await check('browser: public contents tracks headings on desktop and phone', async () => {
+        const shared = (await call('PATCH', `/vaults/${vault.id}/share`, { link: true })).data.share_token;
+        const note = await mcp('create', { vaultId: vault.id, name: 'Public outline', content:
+            '# Overview\n\n' + 'Introduction.\n\n'.repeat(45) + '## Details\n\n' + 'Evidence.\n\n'.repeat(45) + '## Details\n\n[Child](/Labs/Child.md)' });
+        const context = await browser!.newContext({ viewport: { width: 1440, height: 900 } });
+        const page = await context.newPage();
+        await page.goto(`${base}/share/${shared}?file=${note.id}`);
+        const rail = page.getByRole('navigation', { name: 'On this page' });
+        await rail.waitFor();
+        const last = rail.getByRole('button', { name: 'Details' }).last();
+        await last.click();
+        await page.waitForFunction(() => document.querySelectorAll('nav [aria-current="location"]')[0] === document.querySelector('nav[aria-label="On this page"] li:last-child button'));
+        assert.ok((await rail.boundingBox())!.x >= (await page.locator('article').boundingBox())!.x + (await page.locator('article').boundingBox())!.width);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await rail.waitFor({ state: 'hidden' });
+        await page.getByRole('button', { name: 'Contents', exact: true }).click();
+        await page.getByRole('list', { name: 'Contents' }).getByRole('button', { name: 'Overview' }).click();
+        await page.waitForFunction(() => document.querySelector('main')!.scrollTop < 64);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        await context.close();
     });
 
     await check('browser: public link renders read-only on a phone without signing in', async () => {

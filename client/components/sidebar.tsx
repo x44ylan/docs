@@ -1,6 +1,6 @@
 // Vault tree: A-Z, folders first, chevrons only where there are children,
 // drag and drop to nest, pins at the top. Large vaults are virtualised.
-import { IconChevronRight, IconDots, IconFilePlus, IconFileText, IconFolder, IconFolderPlus, IconPencil, IconPhoto, IconPin, IconPinnedOff, IconPlus, IconShare, IconTrash } from '@tabler/icons-react';
+import { IconChevronRight, IconDots, IconFilePlus, IconFileText, IconFolder, IconFolderPlus, IconPencil, IconPhoto, IconPin, IconPinnedOff, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useMemo, useRef, useState } from 'react';
 import type { TreeNode } from '../api.ts';
@@ -15,7 +15,6 @@ export type TreeActions = {
     remove: (node: TreeNode) => void;
     move: (node: TreeNode, parentId: number | null) => void;
     pin: (node: TreeNode, pinned: boolean) => void;
-    share: () => void;
     trash: () => void;
 };
 
@@ -65,7 +64,6 @@ export function Sidebar({ name, tree, pins, selected, main, actions }: { name: s
                     <MenuContent>
                         <MenuItem onSelect={() => actions.create(null, 'note')}><IconPlus />New note</MenuItem>
                         <MenuItem onSelect={() => actions.create(null, 'folder')}><IconFolderPlus />New folder</MenuItem>
-                        <MenuItem onSelect={actions.share}><IconShare />Share</MenuItem>
                         <MenuSeparator />
                         <MenuItem onSelect={actions.trash}><IconTrash />Trash</MenuItem>
                     </MenuContent>

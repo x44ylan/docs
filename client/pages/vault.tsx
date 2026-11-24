@@ -9,7 +9,8 @@ import { markdown } from '../../shared/schema.ts';
 import { api, cache, cached, type Note, type TreeNode, type User, type Vault } from '../api.ts';
 import { type Crumb, FormatIcon, Header, OfflineDot, UserMenu } from '../components/header.tsx';
 import { Palette } from '../components/palette.tsx';
-import { Contents, FindBar, headingsOf, HistoryDialog, ShareDialog, TrashDialog } from '../components/panels.tsx';
+import { Contents, PageOutline } from '../components/contents.tsx';
+import { FindBar, headingsOf, HistoryDialog, ShareDialog, TrashDialog } from '../components/panels.tsx';
 import { Sidebar } from '../components/sidebar.tsx';
 import { Toolbar } from '../components/toolbar.tsx';
 import { refreshAnchors } from '../editor/extensions.ts';
@@ -265,12 +266,15 @@ export function VaultPage() {
                                 <PopoverContent side="left"><Contents headings={headings} onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} /></PopoverContent>
                             </Popover>
                         )}
+                        <MenuSeparator />
+                        <MenuItem onSelect={() => create(note.id, 'note')}><IconFilePlus />New sub-note</MenuItem>
                         <MenuItem onSelect={() => void pin(note, !note.pinned)}>{note.pinned ? <IconPinnedOff /> : <IconPin />}{note.pinned ? 'Unpin' : 'Pin'}</MenuItem>
                         <MenuItem onSelect={() => setPanel('history')}><IconHistory />History</MenuItem>
-                        <MenuSeparator />
+                    </>}
+                    <MenuSeparator />
+                    <MenuItem onSelect={() => setPanel('share')}><IconShare />Share</MenuItem>
+                    {note && <>
                         <MenuItem onSelect={() => void copyMarkdown()}><IconCopy />Copy as Markdown</MenuItem>
-                        <MenuItem onSelect={async () => { await navigator.clipboard.writeText(`${location.origin}/vaults/${vaultId}?file=${note.id}`); toast.success('Link copied'); }}><IconLink />Copy link</MenuItem>
-                        <MenuItem onSelect={() => create(note.id, 'note')}><IconFilePlus />New sub-note</MenuItem>
                         {!!note.backlinks.length && (
                             <>
                                 <MenuSeparator />
@@ -327,7 +331,7 @@ export function VaultPage() {
                             pins={vault.pins}
                             selected={note?.id ?? null}
                             main={vault.main}
-                            actions={{ open, warm: node => node.kind === 'note' && warm(vaultId, node.id), create, rename, remove: node => void remove(node), move: (node, parent) => void move(node, parent), pin: (node, on) => void pin(node, on), share: () => setPanel('share'), trash: () => setPanel('trash') }}
+                            actions={{ open, warm: node => node.kind === 'note' && warm(vaultId, node.id), create, rename, remove: node => void remove(node), move: (node, parent) => void move(node, parent), pin: (node, on) => void pin(node, on), trash: () => setPanel('trash') }}
                         />
                     )}
                 </aside>
@@ -358,12 +362,7 @@ export function VaultPage() {
                             </div>
                         </div>
                         {outlineWide && note && headings.length >= 2 && (
-                            <nav aria-label="On this page" className="page-outline mr-10 sticky top-0 max-h-[calc(100dvh-3.5rem)] w-[14.5rem] shrink-0 self-start overflow-y-auto overscroll-contain pr-6 pt-10 pb-6 print:hidden">
-                                <div>
-                                    <h2 className="mb-3 pl-4 text-sm font-semibold">On this page</h2>
-                                    <Contents headings={headings} inline onJump={id => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
-                                </div>
-                            </nav>
+                            <PageOutline headings={headings} />
                         )}
                     </div>
                 </main>

@@ -1,15 +1,30 @@
 // Public read-only link: the vault's notes as rendered HTML, no editing.
-import { IconChevronRight, IconFileText, IconFolder, IconLayoutSidebar } from '@tabler/icons-react';
+import { IconChevronRight, IconFileText, IconFolder, IconLayoutSidebar, IconListDetails, IconMoon, IconSun } from '@tabler/icons-react';
 import DOMPurify from 'dompurify';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import type { TreeNode } from '../api.ts';
+import { Contents, PageOutline, type Heading } from '../components/contents.tsx';
 import { Header, DocIcon } from '../components/header.tsx';
 import { buildTree, resolve } from '../tree.ts';
-import { title } from '../theme.ts';
-import { cn, IconButton } from '../ui.tsx';
+import { createLazyLowlight } from '../editor/lowlight.ts';
+import type { RootContent } from 'hast';
+import { title, useTheme } from '../theme.ts';
+import { cn, IconButton, Popover, PopoverContent, PopoverTrigger } from '../ui.tsx';
 
 type Shared = { name: string; nodes: Pick<TreeNode, 'id' | 'parent_id' | 'name' | 'kind'>[]; note: { id: number; name: string; path: string; html: string } | null };
+
+// Lowlight emits text and nested token spans. Keep code samples literal.
+function appendTokens(parent: Element, tokens: RootContent[]) {
+    for (const token of tokens) {
+        if (token.type === 'text') parent.append(token.value);
+        if (token.type !== 'element') continue;
+        const span = parent.ownerDocument.createElement('span');
+        if (Array.isArray(token.properties.className)) span.className = token.properties.className.join(' ');
+        appendTokens(span, token.children);
+        parent.append(span);
+    }
+}
 
 export function Share() {
     const token = useParams().token!;
@@ -17,6 +32,11 @@ export function Share() {
     const [data, setData] = useState<Shared>();
     const [error, setError] = useState('');
     const [sidebar, setSidebar] = useState(() => matchMedia('(min-width: 1024px)').matches);
+    const { dark, toggle } = useTheme();
+    const [grammarVersion, setGrammarVersion] = useState(0);
+    const [highlighter] = useState(() => createLazyLowlight(() => setGrammarVersion(version => version + 1)));
+    const main = useRef<HTMLElement>(null);
+    const [contentsOpen, setContentsOpen] = useState(false);
     const file = params.get('file');
 
     useEffect(() => {
@@ -26,21 +46,37 @@ export function Share() {
             if (!response.ok) return setError(body.error ?? 'This link is no longer available.');
             setData(body);
             title(body.note?.name ?? body.name);
-            scrollTo(0, 0);
+            main.current?.scrollTo(0, 0);
         });
     }, [token, file]);
 
     const tree = useMemo(() => buildTree((data?.nodes ?? []).map(n => ({ ...n, vault_id: 0, ext: null, updated_at: '' }))), [data]);
-    const html = useMemo(() => {
-        if (!data?.note) return '';
+    const { html, headings } = useMemo(() => {
+        const headings: Heading[] = [];
+        if (!data?.note) return { html: '', headings };
         const doc = new DOMParser().parseFromString(DOMPurify.sanitize(data.note.html), 'text/html');
         doc.querySelectorAll('img').forEach(img => {
             const src = img.getAttribute('src') ?? '';
             if (!/^(https?:|data:)/.test(src)) img.src = `/share/${token}/files?from=${data.note!.id}&path=${encodeURIComponent(src)}`;
         });
+        for (const code of doc.querySelectorAll('pre > code')) {
+            const language = [...code.classList].find(name => name.startsWith('language-'))?.slice(9);
+            const source = code.textContent;
+            const tokens = language && highlighter.registered(language)
+                ? highlighter.highlight(language, source)
+                : highlighter.highlightAuto(source);
+            code.replaceChildren();
+            appendTokens(code, tokens.children);
+        }
         doc.querySelectorAll('input').forEach(input => input.setAttribute('disabled', ''));
-        return doc.body.innerHTML;
-    }, [data]);
+        for (const element of doc.querySelectorAll('h1, h2, h3')) {
+            const text = element.textContent.trim();
+            if (!text) continue;
+            element.id = `shared-section-${headings.length + 1}`;
+            headings.push({ id: element.id, text, level: Number(element.tagName.slice(1)) });
+        }
+        return { html: doc.body.innerHTML, headings };
+    }, [data, token, highlighter, grammarVersion]);
 
     if (error) return <div className="flex h-dvh items-center justify-center p-6 text-sm text-muted-foreground">{error}</div>;
     return (
@@ -49,6 +85,18 @@ export function Share() {
                 brand={<span className="inline-flex size-9 shrink-0 items-center justify-center"><DocIcon /></span>}
                 lead={<IconButton label="Toggle notes" className="max-sm:hidden" onClick={() => setSidebar(s => !s)}><IconLayoutSidebar /></IconButton>}
                 crumbs={!data ? [] : data.note && data.note.name !== data.name ? [{ label: data.name }, { label: data.note.name }] : [{ label: data.name }]}
+                actions={headings.length >= 2 && (
+                    <Popover open={contentsOpen} onOpenChange={setContentsOpen}>
+                        <PopoverTrigger asChild><IconButton label="Contents" className="xl:hidden"><IconListDetails /></IconButton></PopoverTrigger>
+                        <PopoverContent>
+                            <Contents headings={headings} onJump={id => {
+                                setContentsOpen(false);
+                                document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }} />
+                        </PopoverContent>
+                    </Popover>
+                )}
+                account={<IconButton label={dark ? 'Light mode' : 'Dark mode'} onClick={toggle}>{dark ? <IconSun /> : <IconMoon />}</IconButton>}
                 onTitle={innerWidth < 640 ? () => setSidebar(s => !s) : undefined}
             />
             <div className="flex min-h-0 flex-1">
@@ -57,18 +105,23 @@ export function Share() {
                         <Branch tree={tree} parent={null} depth={0} selected={data.note?.id} open={id => { setParams({ file: String(id) }); if (innerWidth < 1024) setSidebar(false); }} />
                     </aside>
                 )}
-                <main className="min-w-0 flex-1 overflow-y-auto">
-                    <article
-                        className="note prose prose-neutral dark:prose-invert mx-auto max-w-[46rem] px-4 pt-6 pb-24 sm:px-8 sm:pt-10"
-                        onClick={event => {
-                            const href = (event.target as HTMLElement).closest('a')?.getAttribute('href');
-                            if (!href || !data?.note) return;
-                            const target = resolve(tree, data.note.id, href);
-                            if (target?.kind === 'note') { event.preventDefault(); setParams({ file: String(target.id) }); }
-                            else if (/^https?:/i.test(href)) { event.preventDefault(); window.open(href, '_blank', 'noopener'); }
-                        }}
-                        dangerouslySetInnerHTML={{ __html: html }}
-                    />
+                <main ref={main} className="page-scroll min-w-0 flex-1 overflow-y-auto">
+                    <div className="mx-auto flex min-h-full w-full">
+                        <div className="min-w-0 flex-1">
+                            <article
+                                className="note prose prose-neutral dark:prose-invert mx-auto max-w-[46rem] px-4 pt-6 pb-24 sm:px-8 sm:pt-10"
+                                onClick={event => {
+                                    const href = (event.target as HTMLElement).closest('a')?.getAttribute('href');
+                                    if (!href || !data?.note) return;
+                                    const target = resolve(tree, data.note.id, href);
+                                    if (target?.kind === 'note') { event.preventDefault(); setParams({ file: String(target.id) }); }
+                                    else if (/^https?:/i.test(href)) { event.preventDefault(); window.open(href, '_blank', 'noopener'); }
+                                }}
+                                dangerouslySetInnerHTML={{ __html: html }}
+                            />
+                        </div>
+                        {headings.length >= 2 && <PageOutline headings={headings} />}
+                    </div>
                 </main>
             </div>
         </div>
