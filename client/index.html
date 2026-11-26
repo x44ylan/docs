@@ -13,6 +13,8 @@
         (() => {
             let theme;
             try { theme = localStorage.getItem('theme'); } catch {}
+            const requested = new URLSearchParams(location.search).get('theme');
+            if (requested === 'dark' || requested === 'light') theme = requested;
             const dark = theme === 'dark' || (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
             document.documentElement.classList.toggle('dark', dark);
             document.getElementById('icon-svg').href = dark ? './icon-dark.svg' : './icon-light.svg';

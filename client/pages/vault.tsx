@@ -69,8 +69,8 @@ export function VaultPage() {
         addEventListener('offline', update);
         return () => { removeEventListener('online', update); removeEventListener('offline', update); };
     }, []);
-    const [editing, setEditing] = useState(() => localStorage.getItem('mode') !== 'read');
-    const [sidebar, setSidebar] = useState(() => matchMedia('(min-width: 1024px)').matches);
+    const [editing, setEditing] = useState(() => (params.get('mode') ?? localStorage.getItem('mode')) !== 'read');
+    const [sidebar, setSidebar] = useState(() => params.has('sidebar') ? params.get('sidebar') === 'open' : matchMedia('(min-width: 1024px)').matches);
     const [tools, setTools] = useState(false);
     const [finding, setFinding] = useState(false);
     const [panel, setPanel] = useState<'share' | 'history' | 'trash' | 'palette' | 'vaults' | null>(null);

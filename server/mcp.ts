@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { assertAccess, identify, type User } from './auth.ts';
 import { HttpError } from './db.ts';
 import * as notes from './notes.ts';
+import { registerUiTools, destructiveTools } from './mcp-ui.ts';
 import { edit, treeChanged } from './sync.ts';
 
 const id = z.number().int().min(1);
@@ -26,7 +27,7 @@ function tools(user: User) {
         server.registerTool(name, {
             description,
             inputSchema: input,
-            annotations: { readOnlyHint: !write, destructiveHint: ['update', 'delete'].includes(name), openWorldHint: false },
+            annotations: { readOnlyHint: !write, destructiveHint: destructiveTools.has(name), openWorldHint: false },
         }, (async (args: z.infer<z.ZodObject<S>>) => {
             try {
                 return ok(await run(args));
@@ -45,10 +46,6 @@ function tools(user: User) {
     });
     tool('search', 'Search accessible Markdown names and content.', { query: z.string().min(1).max(200), vaultId: id.optional(), page }, false,
         ({ query, vaultId, page: n }) => pageOf(notes.search(user, query, vaultId), n));
-    tool('read', 'Read a Markdown document.', { noteId: id }, false, ({ noteId }) => {
-        const found = note(noteId);
-        return { id: found.id, vault_id: found.vault_id, parent_id: found.parent_id, name: found.name, path: notes.path(found.id), content: notes.markdownOf(found.id), updated_at: found.updated_at };
-    });
     tool('create', 'Create a Markdown document in an accessible vault. parentId nests it under a note or folder.',
         { vaultId: id, parentId: id.optional(), name: z.string().min(1).max(255), content: text }, true, ({ vaultId, parentId, name, content }) => {
             assertAccess(user, vaultId);
@@ -64,24 +61,8 @@ function tools(user: User) {
                 operation === 'replace' ? content : operation === 'prepend' ? content + current : current.replace(/\n$/, '') + content);
             return { ...notes.node(found.id), content: markdown };
         });
-    tool('move', 'Move a Markdown document and its sub-notes under a note or folder in the same vault. Set parentId to null for the vault root. Preserves IDs, attachments and links; duplicate names receive a suffix. Returns the new name and parent_id.',
-        { noteId: id, parentId: id.nullable() }, true, async ({ noteId, parentId }) => {
-            const found = note(noteId);
-            const records = notes.captureLinks(found.id);
-            notes.move(found.id, parentId);
-            for (const [source, map] of notes.brokenLinks(records)) await edit(source, user, 'web', current => notes.replaceHrefs(current, map));
-            notes.mirrorVault(found.vault_id);
-            treeChanged(found.vault_id);
-            return notes.node(found.id);
-        });
-    tool('delete', 'Move a document and its sub-notes to the vault trash. It can be restored from Docs for 30 days.', { noteId: id }, true, ({ noteId }) => {
-        const found = note(noteId);
-        notes.trash(found.id, user);
-        notes.mirrorVault(found.vault_id);
-        treeChanged(found.vault_id);
-        return { id: found.id, trashed: true };
-    });
     tool('backlinks', 'List documents that link to a document.', { noteId: id }, false, ({ noteId }) => notes.backlinks(note(noteId).id));
+    registerUiTools(user, tool);
     return server;
 }
 

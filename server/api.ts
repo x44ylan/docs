@@ -3,17 +3,26 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { extname, join, posix } from 'node:path';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
-import { Hono, type Context } from 'hono';
+import { Hono, type Context, type ErrorHandler } from 'hono';
 import { assertAccess, assertion, identify, type User } from './auth.ts';
 import { all, blobsDir, filesDir, get, HttpError, run, tx } from './db.ts';
 import * as notes from './notes.ts';
 import { disconnect, edit, treeChanged } from './sync.ts';
 
-type Env = { Variables: { user: User } };
+type Env = { Bindings: { authenticatedUser?: User }; Variables: { user: User } };
 export const api = new Hono<Env>();
 
+// In-process callers use the same status codes and messages as the mounted API.
+export const apiError: ErrorHandler = (error, c) => {
+    if (error instanceof HttpError) return c.json({ error: error.message }, error.status);
+    console.error(error);
+    return c.json({ error: 'Something went wrong. Try again.' }, 500);
+};
+api.onError(apiError);
+
 api.use(async (c, next) => {
-    c.set('user', await identify(assertion(c.req.header('cf-access-jwt-assertion'), c.req.header('cookie'))));
+    // Only in-process MCP calls supply a previously authenticated identity in bindings.
+    c.set('user', c.env?.authenticatedUser ?? await identify(assertion(c.req.header('cf-access-jwt-assertion'), c.req.header('cookie'))));
     await next();
     c.header('Cache-Control', 'no-store');
 });

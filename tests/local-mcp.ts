@@ -56,6 +56,9 @@ try {
         assert.equal(reply.result.serverInfo.name, 'Docs');
         bridge.stdin!.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
         const listed = await rpc('tools/list');
+        for (const retired of ['open_item', 'move_item', 'trash_item']) {
+            assert.ok(!listed.result.tools.some((t: { name: string }) => t.name === retired));
+        }
         assert.ok(listed.result.tools.some((t: { name: string }) => t.name === 'me'));
     });
 
@@ -71,6 +74,82 @@ try {
         const note = await tool('create', { vaultId: vault.id, name: 'From Codex', content: '# From Codex\n' });
         await tool('update', { noteId: note.id, content: 'Added locally.\n' });
         assert.match((await tool('read', { noteId: note.id })).content, /Added locally/);
+    });
+
+    await step('manage vaults, trees and history through MCP and verify in the browser API', async () => {
+        const created = await tool('create_vault', { name: 'Notebook' });
+        const v = { vaultId: created.id };
+        const opened = await tool('open_vault', v);
+        assert.equal(opened.open.name, 'Notebook');
+        assert.equal((await tool('home')).vaults.some((item: { id: number }) => item.id === created.id), true);
+        assert.equal((await tool('rename_vault', { ...v, name: 'Journal' })).name, 'Journal');
+        const folder = await tool('create_folder', { ...v, name: 'Year' });
+        const doc = await tool('create', { ...v, parentId: folder.id, name: 'First', content: '# Title\n\n## Detail\n\nOriginal text.' });
+        const item = { ...v, nodeId: doc.id };
+        const note = { noteId: doc.id };
+        assert.equal((await tool('rename_item', { ...item, name: 'Second' })).name, 'Second');
+        assert.equal((await tool('move', { noteId: doc.id, parentId: opened.main })).parent_id, opened.main);
+        await tool('set_pin', { ...item, pinned: true });
+        assert.equal((await (await call(`/vaults/${v.vaultId}/nodes/${doc.id}`)).json()).pinned, true);
+        assert.equal((await tool('read', { noteId: doc.id })).name, 'Second');
+        assert.equal((await tool('note_contents', note))[1].text, 'Detail');
+        assert.match((await tool('preview_note', note)).html, /<h2>Detail/);
+        assert.deepEqual(await tool('note_presence', note), []);
+        assert.equal((await tool('find_in_note', { ...note, query: 'ORIGINAL' })).data[0].line, 5);
+        const view = await tool('view_link', { ...v, ...note, theme: 'dark', mode: 'read', sidebar: 'closed' });
+        assert.equal(new URL(view.url).searchParams.get('file'), String(doc.id));
+        assert.deepEqual(await tool('code_blocks', note), []);
+        assert.equal((await tool('edit_selection', { ...note, original: 'Original text.', replacement: '**Original text.**' })).updated, true);
+        assert.ok((await tool('edit_selection', { ...note, original: 'Stale text.', replacement: 'x' })).error);
+        await tool('update', { ...note, content: 'Changed.', operation: 'replace' });
+        const history = await tool('list_versions', item);
+        const versions = await Promise.all(history.map(async (entry: { id: number }) => ({
+            versionId: entry.id, ...await tool('read_version', { ...item, versionId: entry.id }),
+        })));
+        const prior = { ...item, versionId: versions.find(v => v.markdown.includes('Original text.')).versionId };
+        assert.ok((await tool('compare_version', prior)).some((part: { added?: boolean }) => part.added));
+        assert.equal((await tool('restore_version', prior)).ok, true);
+        assert.match((await tool('read', note)).content, /Original text/);
+
+        const file = await tool('upload_file', { ...item, filename: 'sample.png', base64: 'AQID' });
+        assert.equal((await tool('download_file', { ...v, fromId: doc.id, path: file.src })).base64, 'AQID');
+        const archive = await tool('export_vault', v);
+        const imported = await tool('import_vault', { filename: 'Imported.zip', base64: archive.base64 });
+        assert.ok((await tool('open_vault', { vaultId: imported.id })).nodes.some((n: { name: string }) => n.name === 'Second'));
+        assert.equal((await tool('delete_vault', { vaultId: imported.id })).ok, true);
+
+        const folderItem = { ...v, nodeId: folder.id };
+        assert.equal((await tool('read', { noteId: folder.id })).kind, 'folder');
+        assert.equal((await tool('move', { noteId: folder.id, parentId: opened.main })).parent_id, opened.main);
+        assert.equal((await tool('read', { noteId: file.id })).kind, 'file');
+        assert.equal((await tool('move', { noteId: file.id, parentId: folder.id })).parent_id, folder.id);
+        await tool('delete', { noteId: folder.id });
+        assert.ok((await tool('list_trash', v)).some((n: { id: number }) => n.id === folder.id));
+        assert.equal((await tool('restore_item', folderItem)).id, folder.id);
+        await tool('delete', { noteId: folder.id });
+        assert.equal((await tool('purge_item', folderItem)).ok, true);
+        assert.ok((await tool('leave_vault', v)).error);
+        assert.equal((await tool('delete_vault', v)).ok, true);
+    });
+
+    await step('share and revoke access with the same identity and boundaries as the UI', async () => {
+        const v = { vaultId: vault.id };
+        const people = await tool('find_people', { ...v, query: 'stranger' });
+        assert.equal(people[0].email, 'stranger@example.test');
+        assert.ok((await tool('rename_vault', { vaultId: hidden.id, name: 'Denied' })).error);
+        assert.ok((await tool('set_sharing', { vaultId: hidden.id, link: true })).error);
+        assert.ok((await tool('export_vault', { vaultId: hidden.id })).error);
+        assert.equal((await tool('add_member', { ...v, email: people[0].email })).ok, true);
+        assert.ok((await tool('list_members', v)).some((u: { id: number }) => u.id === people[0].id));
+        const shared = await tool('set_sharing', { ...v, link: true });
+        const publicPage = () => fetch(shared.url, { headers: { accept: 'application/json' } });
+        assert.equal((await publicPage()).status, 200);
+        assert.equal((await tool('get_sharing', v)).url, shared.url);
+        await tool('set_sharing', { ...v, link: false });
+        assert.equal((await publicPage()).status, 404);
+        assert.equal((await tool('remove_member', { ...v, userId: people[0].id })).ok, true);
+        assert.equal((await tool('rename_profile', { name: 'Account owner' })).name, 'Account owner');
+        assert.equal((await tool('me')).name, 'Account owner');
     });
 
     await step('the public /mcp still requires Cloudflare Access', async () => {

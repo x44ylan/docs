@@ -23,6 +23,31 @@ edit, so it can be restored from History. `delete` moves a note and its
 sub-notes to the vault trash for 30 days. `backlinks` lists notes that link to a
 note.
 
+### Available actions
+
+The former `open_item`, `move_item` and `trash_item` actions are now `read`, `move` and `delete`. Pass the sidebar item ID as `noteId` for a note, folder or attachment.
+
+To create a vault, call `create_vault` with a name. It creates a private vault and its main note. Use the returned ID with `open_vault` to get the same tree, pinned items and main note as the sidebar.
+
+```json
+{"name":"create_vault","arguments":{"name":"Research"}}
+```
+
+| UI feature | MCP tools |
+| --- | --- |
+| Home, profile, vault switching | `home`, `me`, `rename_profile`, `vaults`, `open_vault` |
+| Manage vaults | `create_vault`, `rename_vault`, `leave_vault`, `delete_vault` (permanent, owner only) |
+| Sidebar, folders and notes | `list`, `create_folder`, `create`, `rename_item`, `move`, `set_pin` |
+| Edit, format and copy | `read` returns Markdown. `edit_selection` replaces one exact passage. `update` appends, prepends or replaces Markdown. Use Markdown for formatting, tables, images, tasks, links and diagram fences. |
+| Navigate and preview | `search`, `find_in_note`, `note_contents`, `backlinks`, `preview_note` (HTML), `code_blocks` (source), `note_presence` |
+| Open in a browser | `view_link` returns a signed-in URL with optional note, light/dark theme, read/edit mode and open/closed sidebar. |
+| History, compare and undo an edit | `list_versions`, `read_version`, `compare_version`, `restore_version`. Restoring records the previous content so you can reapply it. |
+| Trash | `delete`, `list_trash`, `restore_item`, `purge_item` |
+| People and read-only links | `find_people`, `list_members`, `add_member`, `remove_member`, `get_sharing`, `set_sharing` |
+| Attachments and ZIP archives | `upload_file`, `download_file`, `import_vault`, `export_vault`. File bytes travel as standard base64. The MCP transport accepts JSON requests up to 4 MiB including base64 and metadata. Use the browser for larger uploads. |
+
+Tools operate on saved content or live documents. A browser tab owns its clipboard, cursor, scroll position, interactive diagram previews and per-editor undo stack. To jump to a note in the browser, open its view link.
+
 For Codex:
 
 ```sh

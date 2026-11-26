@@ -208,7 +208,7 @@ try {
     await check('mcp: tools, arguments and errors match the previous server', async () => {
         const list = await fetch(`${base}/mcp`, { method: 'POST', headers: { 'cf-access-jwt-assertion': alex, 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) });
         const names = (await list.json()).result.tools.map((t: { name: string }) => t.name).sort();
-        assert.deepEqual(names, ['backlinks', 'create', 'delete', 'list', 'me', 'move', 'read', 'search', 'update', 'vaults']);
+        for (const name of ['backlinks', 'create', 'delete', 'list', 'me', 'move', 'read', 'search', 'update', 'vaults', 'create_vault']) assert.ok(names.includes(name), name);
         assert.equal((await mcp('me', {})).email, 'alex@example.test');
         const created = await mcp('create', { vaultId: vault.id, parentId: main, name: 'From agent', content: 'Hello' });
         assert.equal(created.parent_id, main);
@@ -730,6 +730,16 @@ try {
                 await page.context().close();
             }
         }
+    });
+
+    await check('browser: MCP view links open the requested note and display settings', async () => {
+        const link = await mcp('view_link', { vaultId: vault.id, noteId: child.id, theme: 'dark', mode: 'read', sidebar: 'closed' });
+        const { page } = await open({ width: 1440, height: 900 });
+        await page.goto(link.url);
+        await page.getByRole('button', { name: 'Edit', exact: true }).waitFor();
+        assert.equal(await page.locator('html').evaluate(el => el.classList.contains('dark')), true);
+        assert.equal(await page.getByRole('button', { name: 'Toggle notes' }).getAttribute('aria-expanded'), 'false');
+        await page.context().close();
     });
 
     await check('browser: open vault sharing from More on desktop and phone', async () => {

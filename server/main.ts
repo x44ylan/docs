@@ -6,7 +6,7 @@ import { getRequestListener, serve } from '@hono/node-server';
 import { generateHTML } from '@tiptap/html/server';
 import { Hono } from 'hono';
 import { extensions, markdown } from '../shared/schema.ts';
-import { api, fileAt, sendFile } from './api.ts';
+import { api, apiError, fileAt, sendFile } from './api.ts';
 import type { User } from './auth.ts';
 import { dataDir, get, HttpError } from './db.ts';
 import { local, mcp } from './mcp.ts';
@@ -16,11 +16,7 @@ import { hocuspocus, snapshotAll, upgrade } from './sync.ts';
 const app = new Hono();
 const dist = join(import.meta.dirname, '../dist');
 
-app.onError((error, c) => {
-    if (error instanceof HttpError) return c.json({ error: error.message }, error.status);
-    console.error(error);
-    return c.json({ error: 'Something went wrong. Try again.' }, 500);
-});
+app.onError(apiError);
 
 app.use(async (c, next) => {
     await next();
